@@ -1597,7 +1597,7 @@ const App = {
           <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
           <div>
             <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
-            <div style="font-size:9pt; color:#555;">${S.company_slogan || ''}</div>
+            <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
             <div style="font-size:9pt; color:#555;">Hotline / Zalo: ${S.company_hotline || ''} • Email: ${S.company_email || ''}</div>
             ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ: ${S.company_address}${S.company_tax_code ? ' • MST: ' + S.company_tax_code : ''}</div>` : ''}
           </div>

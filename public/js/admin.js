@@ -168,7 +168,7 @@ window.Admin = {
           <img src="/assets/logo.png" style="height:40px;">
           <div>
             <div style="font-size:14px; font-weight:800; color:${C};">${e(S.company_name)}</div>
-            <div style="color:#555;">${e(S.company_slogan)}</div>
+            <div style="color:#111;font-weight:700;">${e(S.company_slogan)}</div>
             <div style="color:#555;">Hotline: ${e(S.company_hotline)} • ${e(S.company_email)}</div>
             ${S.company_address ? `<div style="color:#555;">${e(S.company_address)}${S.company_tax_code ? ' • MST: ' + e(S.company_tax_code) : ''}</div>` : ''}
           </div>
