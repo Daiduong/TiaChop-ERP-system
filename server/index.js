@@ -22,6 +22,7 @@ const auth = require('./auth');
 app.use('/api/auth', auth.router);
 app.use('/api/admin', auth.requireAuth, auth.requireRole('ADMIN'), adminRoutes);
 app.use('/api/finance', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'));
+app.use('/api/reports', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'), require('./reports'));
 app.post('/api/suppliers', auth.requireAuth, auth.requireRole('ADMIN', 'COORDINATOR'));
 app.use('/api', auth.requireAuth, auth.maskCostForSales, apiRoutes);
 

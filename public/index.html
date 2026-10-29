@@ -665,6 +665,55 @@
               </div>
             </div>
           </div>
+
+          <!-- Báo cáo công nợ / Đề nghị thanh toán -->
+          <div class="card-panel" style="margin-top:24px;" id="report-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">📑 Báo Cáo Công Nợ & Giấy Đề Nghị Thanh Toán</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">Xuất Excel / PDF theo mẫu mặc định hoặc mẫu riêng của từng khách hàng.</p>
+              </div>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px;">
+              <div><label class="form-label">Khách hàng</label><select class="form-control" id="rp-customer" style="min-width:220px;"></select></div>
+              <div><label class="form-label">Từ ngày</label><input type="date" class="form-control" id="rp-from"></div>
+              <div><label class="form-label">Đến ngày</label><input type="date" class="form-control" id="rp-to"></div>
+              <label style="font-size:12px; display:flex; gap:6px; align-items:center; padding-bottom:10px;"><input type="checkbox" id="rp-include-paid"> Gồm cả đơn đã thanh toán</label>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+              <button class="btn btn-secondary btn-sm" id="rp-btn-view" onclick="Reports.view()">👁️ Xem Báo Cáo</button>
+              <button class="btn btn-secondary btn-sm" id="rp-btn-xls" onclick="Reports.open('debt','xlsx')">📊 Xuất Excel</button>
+              <button class="btn btn-secondary btn-sm" id="rp-btn-pdf" onclick="Reports.open('debt','html')">📄 Xuất PDF / In</button>
+              <button class="btn btn-primary btn-sm" id="rp-btn-pr" onclick="Reports.open('payment-request')">🖨️ In Giấy Đề Nghị Thanh Toán</button>
+              <button class="btn btn-secondary btn-sm" id="rp-btn-tpl" onclick="Reports.openTemplate()">⚙️ Chỉnh Template</button>
+            </div>
+            <div id="rp-result"></div>
+
+            <div id="rp-template-box" style="display:none; border-top:1px solid var(--border-subtle); margin-top:14px; padding-top:14px;"></div>
+          </div>
+
+          <!-- Theo dõi hóa đơn VAT -->
+          <div class="card-panel" style="margin-top:24px;" id="vat-panel">
+            <div class="panel-header">
+              <div>
+                <h2 class="panel-title">🧾 Theo Dõi Xuất Hóa Đơn VAT</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="vat-summary"></p>
+              </div>
+              <select class="form-control" id="vat-customer" style="width:220px;" onchange="Reports.loadVat()"><option value="">Tất cả khách hàng</option></select>
+              <select class="form-control" id="vat-filter" style="width:180px;" onchange="Reports.loadVat()">
+                <option value="pending">Chưa xuất HĐ</option>
+                <option value="invoiced">Đã xuất HĐ</option>
+                <option value="all">Tất cả</option>
+              </select>
+              <button class="btn btn-primary btn-sm" id="vat-btn-statement" onclick="Reports.issueStatement()">📋 Xuất HĐ Theo Bảng Kê (đơn đã chọn)</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="vat-table">
+                <thead><tr><th></th><th>Đơn Hàng</th><th>Khách Hàng</th><th>VAT</th><th>Số Hóa Đơn</th><th>Ngày Xuất</th><th>Thao Tác</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- ==================== TAB 7: QUẢN TRỊ HỆ THỐNG ==================== -->
@@ -904,8 +953,8 @@
               <div class="form-group">
                 <label class="form-label">Thuế VAT (%)</label>
                 <select id="form-order-vat-rate" class="form-control" onchange="App.calculateOrderTotals()">
-                  <option value="0" selected>0% (Không VAT)</option>
-                  <option value="8">8% (Thuế suất ưu đãi)</option>
+                  <option value="0">0% (Không VAT)</option>
+                  <option value="8" selected>8% (Thuế suất ưu đãi)</option>
                   <option value="10">10% (Thuế suất chuẩn)</option>
                 </select>
               </div>
@@ -1181,7 +1230,7 @@
     // Cache-buster: tải lại JS với version mới khi có thay đổi
     (function() {
       var v = Date.now();
-      var scripts = ['/js/app.js', '/js/admin.js', '/js/auth.js'];
+      var scripts = ['/js/app.js', '/js/admin.js', '/js/reports.js', '/js/auth.js'];
       scripts.forEach(function(src) {
         var s = document.createElement('script');
         s.src = src + '?v=' + v;

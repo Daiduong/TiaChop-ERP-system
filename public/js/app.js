@@ -231,7 +231,7 @@ const App = {
     if (tabId === 'pricing') this.triggerPricingCalculation();
     if (tabId === 'suppliers') this.loadSuppliers();
     if (tabId === 'customers') this.loadCustomers();
-    if (tabId === 'finance') this.loadFinance();
+    if (tabId === 'finance') { this.loadFinance(); if (window.Reports) Reports.init(); }
     if (tabId === 'admin' && window.Admin) Admin.load();
   },
 
@@ -911,7 +911,7 @@ const App = {
     // Reset Form
     document.getElementById('order-form').reset();
     document.getElementById('form-order-discount').value = 0;
-    document.getElementById('form-order-vat-rate').value = 0;
+    document.getElementById('form-order-vat-rate').value = 8;
     document.getElementById('form-order-deposit').value = 0;
     const now = new Date();
     document.getElementById('form-order-deadline').value =
@@ -977,7 +977,7 @@ const App = {
       document.getElementById('form-order-deadline').value = o.delivery_deadline ? o.delivery_deadline.substring(0, 10) : '';
       document.getElementById('form-order-address').value = o.shipping_address || '';
       document.getElementById('form-order-discount').value = o.discount_amount || 0;
-      document.getElementById('form-order-vat-rate').value = o.vat_rate || 0;
+      document.getElementById('form-order-vat-rate').value = o.vat_rate ?? 0;
       // Ô deposit ẩn khi edit (không tạo giao dịch mới tự động)
       document.getElementById('form-order-deposit').value = 0;
       document.getElementById('form-order-notes').value = o.notes || '';

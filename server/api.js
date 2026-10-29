@@ -323,7 +323,7 @@ router.post('/orders', (req, res) => {
       contact_id,
       delivery_deadline,
       shipping_address,
-      vat_rate = 0,
+      vat_rate = 8,
       discount_amount = 0,
       deposit_amount = 0,
       notes = '',
@@ -438,7 +438,7 @@ router.put('/orders/:id', (req, res) => {
       contact_id,
       delivery_deadline,
       shipping_address,
-      vat_rate = 0,
+      vat_rate = 8,
       discount_amount = 0,
       notes = '',
       items = []
