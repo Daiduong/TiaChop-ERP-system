@@ -88,6 +88,80 @@ const OFFSET_SHEETS = {
   '395x545': { w: 395, h: 545, parentPerSheet: 4, parent: '790x1090', label: '39.5 x 54.5 cm (1/4 khổ 79x109)' }
 };
 
+// ---------- BẢNG GIÁ IN OFFSET GỐC (In Thành Danh Master Data) ----------
+// Mỗi biến thể: danh sách [số lượng, tổng tiền]. Giữa các bậc: nội suy tuyến tính.
+// Dưới bậc nhỏ nhất: tính bằng giá bậc nhỏ nhất. Trên bậc lớn nhất: giữ đơn giá bậc cuối.
+const OFFSET_PRICE_TABLES = {
+  FLYER_A5: { label: 'Tờ rơi A5 15x21cm in 2 mặt', unit: 'tờ', variants: {
+    C100: [[1000, 490000], [2000, 620000], [4000, 850000], [6000, 1100000], [10000, 1620000], [20000, 2970000]],
+    C150: [[1000, 570000], [2000, 720000], [4000, 970000], [6000, 1320000], [10000, 1970000], [20000, 3850000]],
+    C200: [[1000, 770000], [2000, 970000], [4000, 1270000], [6000, 1670000], [10000, 2500000], [20000, 4700000]],
+    C300: [[1000, 1250000], [2000, 1770000], [4000, 3420000], [6000, 5040000], [10000, 8170000]] } },
+  FLYER_A4: { label: 'Tờ rơi A4 21x29.7cm in 2 mặt', unit: 'tờ', variants: {
+    C100: [[500, 490000], [1000, 620000], [2000, 850000], [3000, 1100000], [6000, 1620000], [10000, 2970000]],
+    C150: [[500, 570000], [1000, 720000], [2000, 970000], [3000, 1320000], [6000, 1970000], [10000, 3850000]],
+    C200: [[500, 770000], [1000, 970000], [2000, 1270000], [3000, 1670000], [6000, 2500000], [10000, 4700000]],
+    C300: [[500, 1250000], [1000, 1770000], [2000, 3420000], [3000, 5040000], [6000, 8170000]] } },
+  NAMECARD: { label: 'Namecard C300 cán mờ 2 mặt 90x54mm (hộp 100 cái)', unit: 'hộp', variants: {
+    C300: [[2, 80000], [5, 120000], [10, 170000], [20, 300000], [50, 700000], [100, 1300000]] } },
+  FOLDER: { label: 'Folder C300 22x31x7cm cán mờ 1 mặt', unit: 'cái', variants: {
+    C300: [[200, 2500000], [500, 3000000], [1000, 4200000], [2000, 7000000], [3000, 9900000], [5000, 15700000]] } },
+  ENVELOPE_S: { label: 'Bao thư nhỏ 12x22cm F100', unit: 'cái', variants: {
+    F100: [[1000, 970000], [2000, 1740000], [5000, 3700000], [10000, 6200000]] } },
+  ENVELOPE_M: { label: 'Bao thư trung 17x23cm F100', unit: 'cái', variants: {
+    F100: [[1000, 1370000], [2000, 2340000], [5000, 4600000], [10000, 7600000]] } },
+  ENVELOPE_L: { label: 'Bao thư lớn A4 25x34cm F100', unit: 'cái', variants: {
+    F100: [[1000, 2050000], [2000, 3800000], [5000, 7050000], [10000, 12400000]] } },
+  LETTERHEAD: { label: 'Tiêu đề thư A4 in 1 mặt', unit: 'tờ', variants: {
+    F100: [[1000, 800000], [2000, 1400000], [5000, 2400000], [10000, 3200000]],
+    F120: [[1000, 900000], [2000, 1600000], [5000, 2600000], [10000, 3500000]] } },
+  CATALOGUE: { label: 'Catalogue A4 bìa C300 cán mờ, ruột C150, bấm ghim', unit: 'cuốn', variants: {
+    P8: [[300, 3250000], [500, 3800000], [1000, 4800000], [2000, 6800000]],
+    P16: [[300, 5000000], [500, 5800000], [1000, 7200000], [2000, 10400000]],
+    P24: [[300, 6800000], [500, 7800000], [1000, 9800000], [2000, 13800000]],
+    P32: [[300, 9000000], [500, 9700000], [1000, 12700000], [2000, 17400000]] } },
+  VOUCHER: { label: 'Voucher C300 cán mờ 5.4x18.5cm', unit: 'cái', variants: {
+    C300: [[500, 250000], [1000, 370000], [2000, 620000], [5000, 1370000]] } },
+  TAG: { label: 'Tag treo C300 cán mờ 4.5x4.5cm đục 1 lỗ', unit: 'cái', variants: {
+    C300: [[500, 130000], [1000, 180000], [2000, 260000], [5000, 670000]] } }
+};
+
+function tablePrice(points, qty) {
+  const pts = [...points].sort((a, b) => a[0] - b[0]);
+  const exact = pts.find(p => p[0] === qty);
+  if (exact) return { cost: exact[1], note: `đúng bậc ${exact[0].toLocaleString('vi-VN')}` };
+  if (qty < pts[0][0]) return { cost: pts[0][1], note: `dưới bậc tối thiểu → tính giá bậc ${pts[0][0].toLocaleString('vi-VN')}` };
+  const last = pts[pts.length - 1];
+  if (qty > last[0]) return { cost: Math.round(last[1] / last[0] * qty), note: `vượt bậc ${last[0].toLocaleString('vi-VN')} → giữ đơn giá ${fmt(last[1] / last[0])}` };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [q0, c0] = pts[i], [q1, c1] = pts[i + 1];
+    if (qty > q0 && qty < q1) return { cost: Math.round(c0 + (c1 - c0) * (qty - q0) / (q1 - q0)), note: `nội suy giữa ${q0.toLocaleString('vi-VN')} và ${q1.toLocaleString('vi-VN')}` };
+  }
+}
+
+function calcOffsetTable(input, P) {
+  const qty = Math.max(1, parseInt(input.quantity) || 1);
+  const tbl = OFFSET_PRICE_TABLES[input.offsetProduct];
+  const variantKey = tbl.variants[input.offsetVariant] ? input.offsetVariant : Object.keys(tbl.variants)[0];
+  const { cost, note } = tablePrice(tbl.variants[variantKey], qty);
+  const variantLabel = variantKey.startsWith('P') ? `${variantKey.slice(1)} trang` : variantKey;
+  const lines = [{ group: 'In', name: `${tbl.label} — ${variantLabel}, ${qty.toLocaleString('vi-VN')} ${tbl.unit} (${note})`, cost }];
+  return {
+    lines,
+    finalizeArgs: { minOrder: 0 },
+    layout: null,
+    metrics: [
+      ['Sản phẩm', tbl.label],
+      ['Biến thể', variantLabel],
+      ['Số lượng', `${qty.toLocaleString('vi-VN')} ${tbl.unit}`],
+      ['Giá gốc NCC', `${fmt(cost)} (${fmt(cost / qty)}/${tbl.unit})`],
+      ['Cách tính', `Bảng giá In Thành Danh — ${note}`]
+    ],
+    impositionNote: `Giá theo bảng In Thành Danh: ${tbl.label}, ${variantLabel}.`,
+    specs: `Offset, ${tbl.label}, ${variantLabel}`
+  };
+}
+
 const LF_MATERIALS = {
   HIFLEX: { name: 'Bạt Hiflex', code: 'LF_HIFLEX', cost: 28000, rolls: [1600, 2200, 3200] },
   PP: { name: 'PP (in dầu/ in nước)', code: 'LF_PP', cost: 45000, rolls: [914, 1070, 1270, 1520] },
@@ -430,7 +504,7 @@ function calculatePrice(db, input) {
   const P = buildPriceLookup(db);
   const group = GROUP_LABEL[input.group] ? input.group : 'DIGITAL';
   const qty = Math.max(1, parseInt(input.quantity) || 1);
-  const r = group === 'OFFSET' ? calcOffset(input, P) : group === 'LARGE_FORMAT' ? calcLargeFormat(input, P) : calcDigital(input, P);
+  const r = group === 'OFFSET' ? (OFFSET_PRICE_TABLES[input.offsetProduct] ? calcOffsetTable(input, P) : calcOffset(input, P)) : group === 'LARGE_FORMAT' ? calcLargeFormat(input, P) : calcDigital(input, P);
 
   const fin = finalize({
     lines: r.lines,
@@ -455,4 +529,4 @@ function calculatePrice(db, input) {
   };
 }
 
-module.exports = { calculatePrice, fitOnSheet, sheetsNeeded, areaM2, inchToMm, DIGITAL_SHEETS, OFFSET_SHEETS, LF_MATERIALS };
+module.exports = { calculatePrice, fitOnSheet, sheetsNeeded, areaM2, inchToMm, DIGITAL_SHEETS, OFFSET_SHEETS, OFFSET_PRICE_TABLES, LF_MATERIALS };

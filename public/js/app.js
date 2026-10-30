@@ -500,14 +500,18 @@ const App = {
       { key: 'CUSTOM', name: 'Kích thước tùy chỉnh', custom: true }
     ],
     OFFSET: [
-      { key: 'FLYER_A5', name: 'Tờ rơi A5 số lượng lớn', w: 148, h: 210, qty: 5000, unit: 'tờ', gsm: 150 },
-      { key: 'FLYER_A4', name: 'Tờ rơi A4', w: 210, h: 297, qty: 3000, unit: 'tờ', gsm: 150 },
-      { key: 'BROCHURE', name: 'Brochure A4 gấp 3 (trải 297x210)', w: 297, h: 210, qty: 2000, unit: 'tờ', gsm: 200, fin: ['FOLD'] },
-      { key: 'ENVELOPE', name: 'Bao thư 12 x 22 cm (trải bế)', w: 250, h: 280, qty: 2000, unit: 'cái', gsm: 100, paperType: 'FORT', cb: 0, fin: ['DIE_CUT', 'GLUE_BOX'] },
-      { key: 'INVOICE', name: 'Hóa đơn A5 1 màu', w: 148, h: 210, qty: 5000, unit: 'tờ', gsm: 70, paperType: 'FORT', cf: 1, cb: 0 },
-      { key: 'CALENDAR', name: 'Lịch treo tờ 30 x 42 cm', w: 300, h: 420, qty: 1000, unit: 'tờ', gsm: 250 },
-      { key: 'BOX', name: 'Hộp giấy (trải 300 x 400 mm)', w: 300, h: 400, qty: 2000, unit: 'cái', gsm: 300, paperType: 'IVORY', cb: 0, lam: 'GLOSS_1S', fin: ['DIE_CUT', 'GLUE_BOX'] },
-      { key: 'CUSTOM', name: 'Kích thước tùy chỉnh', custom: true }
+      { key: 'FLYER_A5', table: 'FLYER_A5', name: 'Tờ rơi A5 15x21 in 2 mặt', w: 150, h: 210, qty: 1000, unit: 'tờ', variants: ['C100', 'C150', 'C200', 'C300'], def: 'C150' },
+      { key: 'FLYER_A4', table: 'FLYER_A4', name: 'Tờ rơi / Brochure A4 in 2 mặt', w: 210, h: 297, qty: 1000, unit: 'tờ', variants: ['C100', 'C150', 'C200', 'C300'], def: 'C150' },
+      { key: 'NAMECARD', table: 'NAMECARD', name: 'Namecard C300 cán mờ 2 mặt (hộp 100 cái)', w: 90, h: 54, qty: 5, unit: 'hộp', variants: ['C300'] },
+      { key: 'FOLDER', table: 'FOLDER', name: 'Folder / Bìa hồ sơ 22x31x7 cm', w: 220, h: 310, qty: 500, unit: 'cái', variants: ['C300'] },
+      { key: 'ENVELOPE_S', table: 'ENVELOPE_S', name: 'Bao thư nhỏ 12 x 22 cm', w: 120, h: 220, qty: 1000, unit: 'cái', variants: ['F100'] },
+      { key: 'ENVELOPE_M', table: 'ENVELOPE_M', name: 'Bao thư trung 17 x 23 cm', w: 170, h: 230, qty: 1000, unit: 'cái', variants: ['F100'] },
+      { key: 'ENVELOPE_L', table: 'ENVELOPE_L', name: 'Bao thư lớn A4 25 x 34 cm', w: 250, h: 340, qty: 1000, unit: 'cái', variants: ['F100'] },
+      { key: 'LETTERHEAD', table: 'LETTERHEAD', name: 'Tiêu đề thư A4 in 1 mặt', w: 210, h: 297, qty: 1000, unit: 'tờ', variants: ['F100', 'F120'] },
+      { key: 'CATALOGUE', table: 'CATALOGUE', name: 'Catalogue A4 bấm ghim', w: 210, h: 297, qty: 500, unit: 'cuốn', variants: ['P8', 'P16', 'P24', 'P32'], def: 'P16' },
+      { key: 'VOUCHER', table: 'VOUCHER', name: 'Voucher 5.4 x 18.5 cm', w: 54, h: 185, qty: 1000, unit: 'cái', variants: ['C300'] },
+      { key: 'TAG', table: 'TAG', name: 'Tag treo 4.5 x 4.5 cm', w: 45, h: 45, qty: 1000, unit: 'cái', variants: ['C300'] },
+      { key: 'CUSTOM', name: 'Kích thước tùy chỉnh (tính theo công thức kẽm/giấy)', custom: true }
     ],
     LARGE_FORMAT: [
       { key: 'BANNER', name: 'Băng rôn bạt 0.8 x 5 m', w: 5000, h: 800, qty: 2, unit: 'tấm', material: 'HIFLEX', fin: ['EYELET', 'HEM'] },
@@ -537,6 +541,15 @@ const App = {
   },
 
   applyPricingPreset(p) {
+    if (this.state.pricingGroup === 'OFFSET') {
+      const isTable = !!(p && p.table);
+      document.getElementById('fg-off-variant').style.display = isTable ? '' : 'none';
+      document.getElementById('off-tech-fields').style.display = isTable ? 'none' : '';
+      if (isTable) {
+        const label = (k) => k.startsWith('P') ? `${k.slice(1)} trang` : k;
+        document.getElementById('calc-off-variant').innerHTML = p.variants.map(k => `<option value="${k}"${k === (p.def || p.variants[0]) ? ' selected' : ''}>${label(k)}</option>`).join('');
+      }
+    }
     if (!p || p.custom) return;
     const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
     set('calc-width', p.w); set('calc-height', p.h); set('calc-quantity', p.qty);
@@ -583,7 +596,8 @@ const App = {
     if (g === 'OFFSET') Object.assign(input, {
       sheetSize: v('calc-off-sheet'), paperType: v('calc-off-paper'), gsm: parseFloat(v('calc-off-gsm')),
       colorsFront: parseInt(v('calc-off-cf')), colorsBack: parseInt(v('calc-off-cb')),
-      workAndTurn: document.getElementById('calc-off-wt').checked, lamination: v('calc-off-lam')
+      workAndTurn: document.getElementById('calc-off-wt').checked, lamination: v('calc-off-lam'),
+      offsetProduct: preset && preset.table ? preset.table : null, offsetVariant: v('calc-off-variant')
     });
     if (g === 'LARGE_FORMAT') input.material = v('calc-lf-material');
     return input;
@@ -686,7 +700,7 @@ const App = {
 
     let paper = '';
     if (input.group === 'DIGITAL') paper = input.paper;
-    else if (input.group === 'OFFSET') paper = `${input.paperType} ${input.gsm}gsm`;
+    else if (input.group === 'OFFSET') paper = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
     else paper = input.material;
 
     let specs = `[${p.groupLabel}] ${p.specs}`;
