@@ -31,11 +31,13 @@ window.Admin = {
     this.loadPrices();
     this.runChecks(true);
     this.loadPriceHistory();
+    this.loadDbInfo();
   },
 
   switchSub(sub) {
     document.querySelectorAll('#admin-subtabs .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.adminSub === sub));
     document.querySelectorAll('.admin-sub').forEach(el => { el.style.display = el.id === `admin-sub-${sub}` ? '' : 'none'; });
+    if (sub === 'backup') this.loadDbInfo();
   },
 
   async api(url, method = 'GET', body) {
@@ -380,6 +382,82 @@ window.Admin = {
         </tr>`;
       }).join('') : '<tr><td colspan="6" style="color:var(--text-muted);">Chưa có thay đổi nào.</td></tr>';
     } catch (e) { alert(e.message); }
+  },
+
+  // ==========================================
+  // SAO LƯU & KHÔI PHỤC CƠ SỞ DỮ LIỆU (BACKUP & RESTORE)
+  // ==========================================
+  async loadDbInfo() {
+    const el = document.getElementById('admin-db-info');
+    if (!el) return;
+    try {
+      const res = await fetch('/api/admin/backup/info');
+      if (!res.ok) throw new Error('Không thể lấy thông tin database');
+      const data = await res.json();
+      el.innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span>Dung lượng Database:</span>
+          <strong>${data.database_size_mb} MB (${Number(data.database_size_bytes).toLocaleString()} bytes)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span>Lần sửa đổi gần nhất:</span>
+          <strong>${new Date(data.last_modified).toLocaleString('vi-VN')}</strong>
+        </div>
+        <div style="margin-top:8px; padding-top:6px; border-top:1px dashed var(--border-subtle); display:flex; gap:12px; flex-wrap:wrap;">
+          <span>📦 Đơn hàng: <strong>${data.table_counts.orders}</strong></span>
+          <span>👥 Khách hàng: <strong>${data.table_counts.customers}</strong></span>
+          <span>🏭 Xưởng in: <strong>${data.table_counts.suppliers}</strong></span>
+          <span>👤 Người dùng: <strong>${data.table_counts.users}</strong></span>
+          <span>💰 Thu chi: <strong>${data.table_counts.transactions}</strong></span>
+        </div>
+      `;
+    } catch (err) {
+      el.innerHTML = `<span style="color:var(--accent-rose);">Lỗi kết nối cơ sở dữ liệu: ${err.message}</span>`;
+    }
+  },
+
+  downloadBackup() {
+    window.location.href = '/api/admin/backup/download';
+  },
+
+  async restoreBackup() {
+    const fileInput = document.getElementById('admin-restore-file');
+    if (!fileInput || !fileInput.files.length) {
+      return alert('Vui lòng chọn file sao lưu (.db) cần khôi phục!');
+    }
+
+    const file = fileInput.files[0];
+    if (!file.name.endsWith('.db') && !file.name.endsWith('.sqlite') && !file.name.endsWith('.sqlite3')) {
+      return alert('File đã chọn không phải là cơ sở dữ liệu SQLite (.db)!');
+    }
+
+    if (!confirm(`⚠️ XÁC NHẬN KHÔI PHỤC DỮ LIỆU?\n\nBạn đang chuẩn bị khôi phục từ file: [${file.name}]\n\nHệ thống sẽ tự động tạo một bản dự phòng tức thời trước khi thay thế. Bạn có chắc chắn muốn tiếp tục không?`)) {
+      return;
+    }
+
+    try {
+      const btn = event?.target;
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang khôi phục...'; }
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      const res = await fetch('/api/admin/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: arrayBuffer
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khôi phục');
+
+      alert(`✅ ${data.message}\nĐã khôi phục thành công ${data.table_count} bảng dữ liệu! Trang web sẽ được tải lại.`);
+      window.location.reload();
+    } catch (err) {
+      alert('Lỗi khôi phục: ' + err.message);
+    } finally {
+      const btn = document.querySelector('#admin-sub-backup .btn-accent');
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ TIẾN HÀNH KHÔI PHỤC DỮ LIỆU'; }
+    }
   }
 };
 

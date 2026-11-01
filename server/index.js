@@ -19,8 +19,13 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // Mount API routes
 const adminRoutes = require('./admin'); // tạo bảng users trước
 const auth = require('./auth');
+const backupRoutes = require('./backup');
+const excelRoutes = require('./excel');
+
 app.use('/api/auth', auth.router);
 app.use('/api/admin', auth.requireAuth, auth.requireRole('ADMIN'), adminRoutes);
+app.use('/api/admin/backup', auth.requireAuth, auth.requireRole('ADMIN'), backupRoutes);
+app.use('/api/excel', auth.requireAuth, excelRoutes);
 app.use('/api/finance', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'));
 app.use('/api/reports', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'), require('./reports'));
 app.post('/api/suppliers', auth.requireAuth, auth.requireRole('ADMIN', 'COORDINATOR'));

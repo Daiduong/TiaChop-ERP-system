@@ -12,6 +12,8 @@ const App = {
     customers: [],
     suppliers: [],
     orders: [],
+    supplierJobs: [], // Cache danh sách lệnh in của xưởng
+    supplierJobsView: 'grouped', // 'grouped' hoặc 'flat'
     filters: {
       status: 'ALL',
       type: null,
@@ -72,6 +74,9 @@ const App = {
       const switcher = document.querySelector('.role-switcher-container');
       if (switcher) switcher.style.display = user.role === 'ADMIN' ? '' : 'none';
       this.applyMenuPermissions(user.role);
+      document.querySelectorAll('.rbac-admin-coord').forEach(el => {
+        el.style.display = ['ADMIN', 'COORDINATOR'].includes(user.role) ? '' : 'none';
+      });
     }
     this.bindEvents();
     this.setupShortcuts();
@@ -265,6 +270,11 @@ const App = {
     if (statProfitCard) {
       statProfitCard.style.display = isSales ? 'none' : '';
     }
+
+    // Ẩn/hiện nút Import/Export theo phân quyền
+    document.querySelectorAll('.rbac-admin-coord').forEach(el => {
+      el.style.display = ['ADMIN', 'COORDINATOR'].includes(role) ? '' : 'none';
+    });
 
     // Ẩn cột Tiến Độ Xưởng In với Sales
     const workshopCol = document.getElementById('dashboard-workshop-col');
@@ -1381,36 +1391,491 @@ const App = {
       const suppliers = await res.json();
       this.state.suppliers = suppliers;
 
-      const container = document.getElementById('suppliers-cards-grid');
-      if (!container) return;
+      // Cập nhật dropdown lọc xưởng in nếu có
+      const supFilter = document.getElementById('supplier-jobs-filter-sup');
+      if (supFilter) {
+        const currentVal = supFilter.value;
+        supFilter.innerHTML = '<option value="ALL">-- Tất cả xưởng in --</option>' +
+          suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        if (currentVal) supFilter.value = currentVal;
+      }
 
-      container.innerHTML = suppliers.map(s => `
-        <div class="card-panel" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between;">
-          <div>
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-              <h3 style="font-size:16px; font-weight:700; color:var(--primary-light);">${s.name}</h3>
-              <span class="badge ${s.printing_count > 0 ? 'badge-producing' : 'badge-draft'}">
-                ${s.printing_count} job đang in
-              </span>
+      const container = document.getElementById('suppliers-cards-grid');
+      if (container) {
+        container.innerHTML = suppliers.map(s => `
+          <div class="card-panel" style="margin-bottom:0; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <h3 style="font-size:16px; font-weight:700; color:var(--primary-light);">${s.name}</h3>
+                <span class="badge ${s.printing_count > 0 ? 'badge-producing' : 'badge-draft'}">
+                  ${s.printing_count} job đang in
+                </span>
+              </div>
+              <div style="font-size:12.5px; color:var(--text-muted); margin:8px 0;">
+                <strong>🎯 Thế mạnh:</strong> ${s.specialties || 'Đa dạng'}
+              </div>
+              <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">
+                <div>📞 <strong>SĐT:</strong> ${s.phone || 'Chưa có'}</div>
+                <div>📍 <strong>Địa chỉ:</strong> ${s.address || 'TP.HCM'}</div>
+                <div>🏦 <strong>TK Ngân Hàng:</strong> ${s.bank_info || 'Chưa cập nhật'}</div>
+                <div>🧾 <strong>Hóa đơn VAT:</strong> ${s.vat_supported ? 'Có hỗ trợ VAT' : 'Không có VAT'}</div>
+              </div>
             </div>
-            <div style="font-size:12.5px; color:var(--text-muted); margin:8px 0;">
-              <strong>🎯 Thế mạnh:</strong> ${s.specialties || 'Đa dạng'}
-            </div>
-            <div style="font-size:12px; color:var(--text-dim); line-height:1.6;">
-              <div>📞 <strong>SĐT:</strong> ${s.phone || 'Chưa có'}</div>
-              <div>📍 <strong>Địa chỉ:</strong> ${s.address || 'TP.HCM'}</div>
-              <div>🏦 <strong>TK Ngân Hàng:</strong> ${s.bank_info || 'Chưa cập nhật'}</div>
-              <div>🧾 <strong>Hóa đơn VAT:</strong> ${s.vat_supported ? 'Có hỗ trợ VAT' : 'Không có VAT'}</div>
+            <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:12px; color:var(--text-dim);">Tổng tiền đã làm:</span>
+              <span style="font-weight:700; color:var(--accent-amber);">${this.formatCurrency(s.total_worked_amount)}</span>
             </div>
           </div>
-          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:12px; color:var(--text-dim);">Tổng tiền đã làm:</span>
-            <span style="font-weight:700; color:var(--accent-amber);">${this.formatCurrency(s.total_worked_amount)}</span>
-          </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
+
+      // Tải danh sách lệnh chuyển xưởng
+      await this.loadSupplierJobs();
     } catch (err) {
       console.error('Error loading suppliers:', err);
+    }
+  },
+
+  setSupplierJobsView(view) {
+    this.state.supplierJobsView = view;
+    const btnGrouped = document.getElementById('btn-view-grouped');
+    const btnFlat = document.getElementById('btn-view-flat');
+    const containerGrouped = document.getElementById('supplier-jobs-grouped-container');
+    const containerFlat = document.getElementById('supplier-jobs-flat-container');
+
+    if (view === 'grouped') {
+      if (btnGrouped) { btnGrouped.className = 'btn btn-sm btn-primary'; }
+      if (btnFlat) { btnFlat.className = 'btn btn-sm btn-secondary'; }
+      if (containerGrouped) containerGrouped.style.display = 'flex';
+      if (containerFlat) containerFlat.style.display = 'none';
+    } else {
+      if (btnGrouped) { btnGrouped.className = 'btn btn-sm btn-secondary'; }
+      if (btnFlat) { btnFlat.className = 'btn btn-sm btn-primary'; }
+      if (containerGrouped) containerGrouped.style.display = 'none';
+      if (containerFlat) containerFlat.style.display = 'block';
+    }
+    this.loadSupplierJobs();
+  },
+
+  async loadSupplierJobs() {
+    const groupedContainer = document.getElementById('supplier-jobs-grouped-container');
+    const tbody = document.getElementById('supplier-jobs-table-tbody');
+    if (!groupedContainer && !tbody) return;
+
+    const supFilter = document.getElementById('supplier-jobs-filter-sup')?.value || 'ALL';
+    const statusFilter = document.getElementById('supplier-jobs-filter-status')?.value || 'ALL';
+
+    const params = new URLSearchParams();
+    if (supFilter !== 'ALL') params.append('supplier_id', supFilter);
+    if (statusFilter !== 'ALL') params.append('status', statusFilter);
+
+    try {
+      const res = await fetch(`/api/suppliers/jobs?${params.toString()}`);
+      if (!res.ok) throw new Error('Không thể tải danh sách lệnh in');
+      const jobs = await res.json();
+      this.state.supplierJobs = jobs || [];
+
+      const isSales = (this.state.currentRole === 'SALES');
+      document.querySelectorAll('#supplier-jobs-table th.col-cost-profit').forEach(th => {
+        th.style.display = isSales ? 'none' : '';
+      });
+
+      const statusBadges = {
+        PENDING: '<span class="badge badge-draft">Chờ gửi xưởng</span>',
+        PRINTING: '<span class="badge badge-producing">Đang in xưởng</span>',
+        DONE: '<span class="badge badge-completed">Đã xong</span>'
+      };
+
+      // 1. RENDER DẠNG GÔM NHÓM THEO XƯỞNG
+      if (groupedContainer) {
+        if (!jobs || jobs.length === 0) {
+          groupedContainer.innerHTML = `
+            <div style="text-align:center; padding:32px; background:var(--bg-surface); border:1px dashed var(--border-subtle); border-radius:var(--radius-md); color:var(--text-muted);">
+              Không có lệnh chuyển qua xưởng nào phù hợp bộ lọc
+            </div>
+          `;
+        } else {
+          // Nhóm các job theo supplier_id
+          const groups = {};
+          jobs.forEach(j => {
+            const sId = j.supplier_id || 'unassigned';
+            if (!groups[sId]) {
+              groups[sId] = {
+                supplier_id: j.supplier_id,
+                supplier_name: j.supplier_name || 'Chưa gán xưởng',
+                supplier_phone: j.supplier_phone || '',
+                items: []
+              };
+            }
+            groups[sId].items.push(j);
+          });
+
+          groupedContainer.innerHTML = Object.values(groups).map(g => {
+            const pendingJobs = g.items.filter(it => it.status === 'PENDING');
+            const printingJobs = g.items.filter(it => it.status === 'PRINTING');
+            const doneJobs = g.items.filter(it => it.status === 'DONE');
+            const totalGroupCost = g.items.reduce((sum, it) => sum + (it.total_cost || 0), 0);
+            const safeSupId = (g.supplier_id || '').replace(/'/g, '');
+
+            const rowsHtml = g.items.map(j => {
+              const fileHtml = j.file_url 
+                ? `<a href="${j.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Mở File In</a>`
+                : `<span style="color:var(--text-dim); font-size:11.5px;">Chưa đính kèm</span>`;
+
+              const deadlineText = j.delivery_deadline 
+                ? new Date(j.delivery_deadline).toLocaleDateString('vi-VN')
+                : '<span style="color:var(--text-dim);">-</span>';
+
+              const orderDate = j.order_created_at 
+                ? new Date(j.order_created_at).toLocaleDateString('vi-VN')
+                : '';
+
+              const badgeHtml = statusBadges[j.status] || `<span class="badge badge-draft">${j.status}</span>`;
+
+              return `
+                <tr style="${j.status === 'PENDING' ? 'background:rgba(245, 158, 11, 0.04);' : ''}">
+                  <td>
+                    <strong style="color:var(--primary-light);">${j.order_code}</strong>
+                    <div style="font-size:11px; color:var(--text-dim);">${orderDate}</div>
+                    <div style="font-size:11px; color:var(--text-muted);">${j.customer_name || ''}</div>
+                  </td>
+                  <td style="max-width:280px; white-space:normal;">
+                    <strong>${j.item_name}</strong>
+                    <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${j.specs || ''}</div>
+                    ${j.imposition_info ? `<div style="font-size:11px; color:var(--primary-light); margin-top:2px;">📐 ${j.imposition_info}</div>` : ''}
+                  </td>
+                  <td style="text-align:center; font-weight:700;">
+                    ${this.formatNumber(j.quantity)} <span style="font-size:11px; font-weight:normal; color:var(--text-dim);">${j.unit || ''}</span>
+                  </td>
+                  <td>${fileHtml}</td>
+                  <td style="white-space:nowrap; font-weight:500;">${deadlineText}</td>
+                  <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} text-align:right; font-weight:600; color:var(--accent-amber);">
+                    ${this.formatCurrency(j.total_cost)}
+                  </td>
+                  <td style="text-align:center;">${badgeHtml}</td>
+                  <td style="text-align:center;">
+                    <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+                      ${j.status === 'PENDING' ? `
+                        <button class="btn btn-accent btn-sm" onclick="App.sendJobToSupplier('${j.id}')" title="Gửi riêng lệnh này cho xưởng">🚀 Gửi</button>
+                      ` : (j.status === 'PRINTING' ? `
+                        <button class="btn btn-primary btn-sm" onclick="App.updateSupplierJobStatus('${j.id}', 'DONE')" title="Đánh dấu đã sản xuất xong">✅ Xong</button>
+                      ` : `
+                        <button class="btn btn-secondary btn-sm" onclick="App.updateSupplierJobStatus('${j.id}', 'PRINTING')" title="Chuyển lại về trạng thái đang in">↩️ Đang In</button>
+                      `)}
+                      <button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${j.order_id}')" title="In phiếu Lệnh xưởng">🖨️ Phiếu</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+
+            return `
+              <div class="card-panel" style="margin-bottom:0; border:1px solid var(--border-subtle); padding:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border-subtle);">
+                  <div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <h3 style="font-size:16px; font-weight:700; color:var(--accent-amber); margin:0;">🏭 ${g.supplier_name}</h3>
+                      ${g.supplier_phone ? `<span style="font-size:12px; color:var(--text-muted);">📞 ${g.supplier_phone}</span>` : ''}
+                    </div>
+                    <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">
+                      Tổng số: <strong>${g.items.length}</strong> lệnh &nbsp;|&nbsp;
+                      <span style="color:var(--accent-amber);">⏳ Chờ gửi: <strong>${pendingJobs.length}</strong></span> &nbsp;|&nbsp;
+                      <span style="color:var(--primary-light);">⚙️ Đang in: <strong>${printingJobs.length}</strong></span> &nbsp;|&nbsp;
+                      <span style="color:var(--accent-green);">✅ Đã xong: <strong>${doneJobs.length}</strong></span>
+                      ${!isSales ? ` &nbsp;|&nbsp; Tiền gia công: <strong style="color:var(--accent-amber);">${this.formatCurrency(totalGroupCost)}</strong>` : ''}
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="App.printSupplierBatchTicket('${safeSupId}', '${g.supplier_name}')" style="font-weight:600;" title="In phiếu tổng hợp gôm nhiều món của xưởng này">
+                      🖨️ In Phiếu Tổng Hợp (${g.items.length} Món)
+                    </button>
+                    ${pendingJobs.length > 0 && g.supplier_id ? `
+                      <button class="btn btn-accent" onclick="App.batchSendToSupplier('${safeSupId}', '${g.supplier_name}')" style="font-weight:700; box-shadow:0 2px 8px rgba(245, 158, 11, 0.3);" title="Gửi toàn bộ lệnh đang chờ và tùy chọn in phiếu gửi kèm">
+                        ⚡ GỬI TOÀN BỘ (${pendingJobs.length} LỆNH)
+                      </button>
+                    ` : (pendingJobs.length === 0 ? `
+                      <span class="badge badge-completed" style="padding:6px 12px; font-size:12px;">✅ Không có lệnh chờ gửi</span>
+                    ` : '')}
+                  </div>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="data-table" style="margin-bottom:0;">
+                    <thead>
+                      <tr>
+                        <th>Mã Đơn / Ngày</th>
+                        <th>Tên Ấn Phẩm & Quy Cách</th>
+                        <th style="text-align: center;">SL</th>
+                        <th>File In</th>
+                        <th>Hạn Giao</th>
+                        <th class="col-cost-profit" style="${isSales ? 'display:none;' : ''} text-align: right;">Tiền Gia Công</th>
+                        <th style="text-align: center;">Trạng Thái</th>
+                        <th style="text-align: center;">Thao Tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rowsHtml}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 2. RENDER DẠNG BẢNG PHẲNG (FLAT)
+      if (tbody) {
+        if (!jobs || jobs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--text-muted);">Không có lệnh chuyển qua xưởng nào phù hợp bộ lọc</td></tr>`;
+        } else {
+          tbody.innerHTML = jobs.map(j => {
+            const fileHtml = j.file_url 
+              ? `<a href="${j.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Mở File In</a>`
+              : `<span style="color:var(--text-dim); font-size:11.5px;">Chưa đính kèm</span>`;
+
+            const deadlineText = j.delivery_deadline 
+              ? new Date(j.delivery_deadline).toLocaleDateString('vi-VN')
+              : '<span style="color:var(--text-dim);">-</span>';
+
+            const orderDate = j.order_created_at 
+              ? new Date(j.order_created_at).toLocaleDateString('vi-VN')
+              : '';
+
+            const badgeHtml = statusBadges[j.status] || `<span class="badge badge-draft">${j.status}</span>`;
+
+            return `
+              <tr>
+                <td>
+                  <strong style="color:var(--primary-light);">${j.order_code}</strong>
+                  <div style="font-size:11px; color:var(--text-dim);">${orderDate}</div>
+                  <div style="font-size:11px; color:var(--text-muted);">${j.customer_name || ''}</div>
+                </td>
+                <td>
+                  <strong style="color:var(--accent-amber);">${j.supplier_name || 'Chưa gán xưởng'}</strong>
+                  ${j.supplier_phone ? `<div style="font-size:11px; color:var(--text-dim);">📞 ${j.supplier_phone}</div>` : ''}
+                </td>
+                <td style="max-width:280px; white-space:normal;">
+                  <strong>${j.item_name}</strong>
+                  <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${j.specs || ''}</div>
+                  ${j.imposition_info ? `<div style="font-size:11px; color:var(--primary-light); margin-top:2px;">📐 ${j.imposition_info}</div>` : ''}
+                </td>
+                <td style="text-align:center; font-weight:700;">
+                  ${this.formatNumber(j.quantity)} <span style="font-size:11px; font-weight:normal; color:var(--text-dim);">${j.unit || ''}</span>
+                </td>
+                <td>${fileHtml}</td>
+                <td style="white-space:nowrap; font-weight:500;">${deadlineText}</td>
+                <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} text-align:right; font-weight:600; color:var(--accent-amber);">
+                  ${this.formatCurrency(j.total_cost)}
+                </td>
+                <td style="text-align:center;">${badgeHtml}</td>
+                <td style="text-align:center;">
+                  <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+                    ${j.status === 'PENDING' ? `
+                      <button class="btn btn-accent btn-sm" onclick="App.sendJobToSupplier('${j.id}')" title="Gửi lệnh này cho xưởng in">🚀 Gửi Xưởng</button>
+                    ` : (j.status === 'PRINTING' ? `
+                      <button class="btn btn-primary btn-sm" onclick="App.updateSupplierJobStatus('${j.id}', 'DONE')" title="Đánh dấu xưởng đã sản xuất xong">✅ Đã Xong</button>
+                    ` : `
+                      <button class="btn btn-secondary btn-sm" onclick="App.updateSupplierJobStatus('${j.id}', 'PRINTING')" title="Chuyển lại về trạng thái đang in">↩️ Đang In</button>
+                    `)}
+                    <button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${j.order_id}')" title="In phiếu Lệnh xưởng">🖨️ Phiếu</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+    } catch (err) {
+      console.error('Error loading supplier jobs:', err);
+      if (groupedContainer) groupedContainer.innerHTML = `<div style="text-align:center; padding:20px; color:var(--accent-rose);">Lỗi khi tải danh sách lệnh in: ${err.message}</div>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--accent-rose);">Lỗi khi tải danh sách lệnh in: ${err.message}</td></tr>`;
+    }
+  },
+
+  async batchSendToSupplier(supplierId, supplierName) {
+    if (!confirm(`Xác nhận GỬI 1 LẦN TOÀN BỘ các lệnh đang chờ cho xưởng [${supplierName}]?\n\nTất cả lệnh chờ sẽ chuyển sang trạng thái "Đang in xưởng" và đơn hàng sẽ được kích hoạt sản xuất.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/suppliers/jobs/batch-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplier_id: supplierId })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi gửi xưởng hàng loạt');
+
+      const shouldPrint = confirm(`✅ Đã gửi thành công ${data.count} lệnh in cho xưởng [${supplierName}]!\n\nBạn có muốn IN PHIẾU GỬI XƯỞNG TỔNG HỢP (Job Ticket gôm nhiều món) cho xưởng ngay bây giờ không?`);
+      if (shouldPrint) {
+        this.printSupplierBatchTicket(supplierId, supplierName, 'ALL');
+      }
+
+      await this.loadSuppliers();
+      this.loadDashboard();
+      this.loadOrders();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  },
+
+  printSupplierBatchTicket(supplierId, supplierName, filterStatus = 'ALL') {
+    let items = (this.state.supplierJobs || []).filter(j => j.supplier_id === supplierId);
+    if (filterStatus && filterStatus !== 'ALL') {
+      items = items.filter(j => j.status === filterStatus);
+    }
+    if (items.length === 0) {
+      alert(`Không có món hàng nào của xưởng [${supplierName}] để in phiếu!`);
+      return;
+    }
+
+    const supplier = (this.state.suppliers || []).find(s => s.id === supplierId) || {};
+    const printable = document.getElementById('printable-area');
+    if (!printable) return;
+
+    const S = (window.Admin && Admin.settings) || {};
+    const C = S.primary_color || '#0284c7';
+    const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+    const totalCost = items.reduce((sum, it) => sum + (Number(it.total_cost) || 0), 0);
+    const isSales = (this.state.currentRole === 'SALES');
+
+    // Gom danh sách mã đơn
+    const uniqueOrders = Array.from(new Set(items.map(it => it.order_code))).filter(Boolean);
+
+    printable.innerHTML = `
+      <div class="print-header" style="border-bottom-color:${C};">
+        <div class="print-logo-box">
+          <img src="/assets/logo.png" style="height:50px;" alt="In Tia Chớp" onerror="this.style.display='none'">
+          <div>
+            <h2 style="font-size:15pt; color:${C}; margin:0;">PHIẾU ĐIỀU PHỐI & LỆNH GỬI XƯỞNG IN</h2>
+            <div style="font-size:9.5pt; color:#555; font-weight:600;">(BẢNG TỔNG HỢP GIA CÔNG GÔM NHIỀU MÓN THEO XƯỞNG)</div>
+          </div>
+        </div>
+        <div class="print-company-info" style="font-size:9pt; line-height:1.5;">
+          <div>Xưởng Nhận: <strong style="font-size:11pt; color:#0f172a;">${supplierName}</strong></div>
+          ${supplier.phone ? `<div>SĐT Liên Hệ: <strong>${supplier.phone}</strong></div>` : ''}
+          ${supplier.address ? `<div>Địa Chỉ Xưởng: ${supplier.address}</div>` : ''}
+          <div>Ngày Xuất Phiếu: <strong>${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</strong></div>
+          <div>Số Lượng Món: <strong>${items.length} hạng mục</strong> | Đơn liên quan: <strong>${uniqueOrders.join(', ')}</strong></div>
+        </div>
+      </div>
+
+      <table class="print-table" style="margin-top:14px;">
+        <thead>
+          <tr style="background:#f1f5f9;">
+            <th style="width:30px; text-align:center;">STT</th>
+            <th style="width:110px;">Mã Đơn / Khách</th>
+            <th>Tên Ấn Phẩm & Quy Cách Kỹ Thuật</th>
+            <th style="width:65px; text-align:center;">Số Lượng</th>
+            <th style="width:50px; text-align:center;">ĐVT</th>
+            <th style="width:85px; text-align:center;">Hạn Giao</th>
+            <th>File Thiết Kế & Bình Bài</th>
+            ${!isSales ? `<th style="width:90px; text-align:right;">Tiền GC (đ)</th>` : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((it, idx) => `
+            <tr>
+              <td style="text-align:center; font-weight:600;">${idx + 1}</td>
+              <td>
+                <strong style="color:#0284c7;">${it.order_code}</strong>
+                <div style="font-size:8.5pt; color:#555; margin-top:2px;">${it.customer_name || ''}</div>
+              </td>
+              <td>
+                <strong style="font-size:10.5pt; color:#111;">${it.item_name}</strong>
+                <div style="font-size:9pt; color:#333; margin-top:3px; line-height:1.35;">${it.specs || 'In chuẩn'}</div>
+                ${it.imposition_info ? `<div style="font-size:8.5pt; color:#0284c7; margin-top:2px; font-weight:600;">📐 ${it.imposition_info}</div>` : ''}
+              </td>
+              <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
+              <td style="text-align:center; font-size:9pt;">${it.unit || ''}</td>
+              <td style="text-align:center; font-size:9pt; font-weight:600; color:#b45309;">
+                ${it.delivery_deadline ? new Date(it.delivery_deadline).toLocaleDateString('vi-VN') : 'Hỏa tốc'}
+              </td>
+              <td style="font-size:9pt; word-break:break-all;">
+                ${it.file_url ? `<div>Link file: <strong>${it.file_url}</strong></div>` : '<div>File chuyển qua Zalo/Drive</div>'}
+              </td>
+              ${!isSales ? `
+                <td style="text-align:right; font-weight:bold; color:#333;">
+                  ${this.formatNumber(it.total_cost)}
+                </td>
+              ` : ''}
+            </tr>
+          `).join('')}
+          <tr style="background:#f8fafc; font-weight:bold;">
+            <td colspan="3" style="text-align:right; font-size:10pt;">TỔNG CỘNG (${items.length} MÓN):</td>
+            <td style="text-align:center; font-size:11pt; color:#0284c7;">${this.formatNumber(totalQty)}</td>
+            <td colspan="3"></td>
+            ${!isSales ? `
+              <td style="text-align:right; font-size:11pt; color:#b45309;">
+                ${this.formatNumber(totalCost)} đ
+              </td>
+            ` : ''}
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:16px; border:1px solid #cbd5e1; border-radius:4px; padding:10px 12px; font-size:9pt; background:#f8fafc; line-height:1.5;">
+        <strong style="color:#0f172a;">Yêu cầu kỹ thuật & chất lượng từ Tia Chớp:</strong>
+        ${((window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '').split('\n').filter(Boolean).map((l, i) => `<div>${i + 1}. ${l}</div>`).join('')}
+        <div style="margin-top:4px; color:#64748b; font-style:italic;">* Xưởng vui lòng kiểm tra file in, kiểm tra màu sắc bản in mẫu và bàn giao đúng tiến độ cam kết.</div>
+      </div>
+
+      <div class="print-signatures" style="margin-top:24px;">
+        <div class="sig-col" style="text-align:center;">
+          <strong>ĐIỀU PHỐI SẢN XUẤT (TIA CHỚP)</strong>
+          <div style="font-size:8.5pt; color:#777; margin-top:4px;">(Ký & bàn giao file/vật tư)</div>
+          <div style="font-size:9.5pt; color:#333; margin-top:50px; font-weight:600;">Dương Trân</div>
+        </div>
+        <div class="sig-col" style="text-align:center;">
+          <strong>ĐẠI DIỆN XƯỞNG IN (${supplierName.toUpperCase()})</strong>
+          <div style="font-size:8.5pt; color:#777; margin-top:4px;">(Ký nhận lệnh in & xác nhận tiến độ)</div>
+          <div style="font-size:9pt; color:#999; margin-top:50px;">...................................................</div>
+        </div>
+      </div>
+    `;
+
+    window.print();
+  },
+
+  async sendJobToSupplier(itemId) {
+    if (!confirm('Xác nhận GỬI XƯỞNG cho lệnh in này? (Trạng thái sẽ chuyển sang Đang in xưởng)')) return;
+    try {
+      const res = await fetch(`/api/suppliers/jobs/${itemId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'PRINTING' })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Lỗi gửi xưởng');
+      }
+      alert('Đã gửi lệnh qua xưởng in thành công!');
+      await this.loadSuppliers();
+      this.loadDashboard();
+      this.loadOrders();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  },
+
+  async updateSupplierJobStatus(itemId, newStatus) {
+    try {
+      const res = await fetch(`/api/suppliers/jobs/${itemId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Lỗi cập nhật');
+      }
+      await this.loadSuppliers();
+      this.loadDashboard();
+      this.loadOrders();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     }
   },
 
@@ -1775,6 +2240,89 @@ const App = {
     `;
 
     window.print();
+  },
+
+  // ==========================================
+  // XUẤT / NHẬP EXCEL DỮ LIỆU (IMPORT & EXPORT)
+  // ==========================================
+  exportOrdersExcel() {
+    window.location.href = '/api/excel/orders/export';
+  },
+
+  exportSupplierJobsExcel() {
+    const sup = document.getElementById('supplier-jobs-filter-sup')?.value || 'ALL';
+    const status = document.getElementById('supplier-jobs-filter-status')?.value || 'ALL';
+    window.location.href = `/api/excel/supplier-jobs/export?supplier_id=${encodeURIComponent(sup)}&status=${encodeURIComponent(status)}`;
+  },
+
+  exportCustomersExcel() {
+    window.location.href = '/api/excel/customers/export';
+  },
+
+  triggerImportCustomers() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!confirm(`Xác nhận nhập danh sách khách hàng từ file [${file.name}]?`)) return;
+
+      try {
+        const buf = await file.arrayBuffer();
+        const res = await fetch('/api/excel/customers/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+          body: buf
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi nhập dữ liệu');
+
+        alert(`✅ ${data.message}`);
+        await this.loadCustomers();
+      } catch (err) {
+        alert('Lỗi nhập Excel: ' + err.message);
+      }
+    };
+    input.click();
+  },
+
+  exportSuppliersExcel() {
+    window.location.href = '/api/excel/suppliers/export';
+  },
+
+  triggerImportSuppliers() {
+    if (!['ADMIN', 'COORDINATOR'].includes(this.state.currentRole)) {
+      return alert('Chỉ Quản trị viên (Admin) hoặc Điều phối xưởng mới có quyền nhập danh sách xưởng in.');
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!confirm(`Xác nhận nhập danh sách xưởng in từ file [${file.name}]?`)) return;
+
+      try {
+        const buf = await file.arrayBuffer();
+        const res = await fetch('/api/excel/suppliers/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+          body: buf
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi nhập dữ liệu');
+
+        alert(`✅ ${data.message}`);
+        await this.loadSuppliers();
+      } catch (err) {
+        alert('Lỗi nhập Excel: ' + err.message);
+      }
+    };
+    input.click();
   },
 
   // ==========================================

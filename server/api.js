@@ -194,6 +194,132 @@ router.get('/suppliers', (req, res) => {
   }
 });
 
+// Danh sách tất cả các lệnh / hạng mục chuyển qua xưởng in
+router.get('/suppliers/jobs', (req, res) => {
+  try {
+    const { supplier_id, status } = req.query;
+    let query = `
+      SELECT 
+        oi.id, oi.order_id, oi.item_name, oi.specs, oi.quantity, oi.unit,
+        oi.supplier_id, oi.file_url, oi.imposition_info, oi.status, oi.total_cost, oi.unit_cost,
+        o.code as order_code, o.type as order_type, o.delivery_deadline, o.status as order_status,
+        o.created_at as order_created_at,
+        c.name as customer_name, c.code as customer_code,
+        s.name as supplier_name, s.phone as supplier_phone
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN suppliers s ON oi.supplier_id = s.id
+      WHERE oi.supplier_id IS NOT NULL
+    `;
+    const params = [];
+
+    if (supplier_id && supplier_id !== 'ALL') {
+      query += ` AND oi.supplier_id = ?`;
+      params.push(supplier_id);
+    }
+
+    if (status && status !== 'ALL') {
+      query += ` AND oi.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY o.created_at DESC, oi.id DESC`;
+
+    const jobs = db.prepare(query).all(...params);
+    res.json(jobs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật trạng thái hạng mục in (Gửi xưởng: PENDING -> PRINTING, hoặc Hoàn thành: DONE)
+router.patch('/suppliers/jobs/:id/status', (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['PENDING', 'PRINTING', 'DONE'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Trạng thái không hợp lệ' });
+    }
+
+    const item = db.prepare('SELECT * FROM order_items WHERE id = ?').get(req.params.id);
+    if (!item) {
+      return res.status(404).json({ error: 'Không tìm thấy hạng mục lệnh in' });
+    }
+
+    db.prepare('UPDATE order_items SET status = ? WHERE id = ?').run(status, req.params.id);
+
+    // Nếu chuyển sang PRINTING (Gửi xưởng), tự động cập nhật đơn hàng sang IN_PRODUCTION nếu đơn đang ở trạng thái trước đó
+    if (status === 'PRINTING') {
+      const order = db.prepare('SELECT status FROM orders WHERE id = ?').get(item.order_id);
+      if (order && ['DRAFT', 'ORDER_CONFIRMED', 'QUOTE_SENT'].includes(order.status)) {
+        db.prepare("UPDATE orders SET status = 'IN_PRODUCTION', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(item.order_id);
+      }
+    }
+
+    res.json({ success: true, id: req.params.id, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Gửi xưởng hàng loạt (gôm nhóm theo danh sách item_ids hoặc theo supplier_id)
+router.post('/suppliers/jobs/batch-send', (req, res) => {
+  try {
+    const { item_ids, supplier_id } = req.body;
+    let itemsToUpdate = [];
+
+    if (Array.isArray(item_ids) && item_ids.length > 0) {
+      const placeholders = item_ids.map(() => '?').join(',');
+      itemsToUpdate = db.prepare(`
+        SELECT id, order_id FROM order_items 
+        WHERE id IN (${placeholders}) AND status = 'PENDING'
+      `).all(...item_ids);
+    } else if (supplier_id) {
+      itemsToUpdate = db.prepare(`
+        SELECT id, order_id FROM order_items 
+        WHERE supplier_id = ? AND status = 'PENDING'
+      `).all(supplier_id);
+    } else {
+      return res.status(400).json({ error: 'Cần cung cấp danh sách item_ids hoặc supplier_id' });
+    }
+
+    if (itemsToUpdate.length === 0) {
+      return res.json({ success: true, count: 0, message: 'Không có lệnh in nào ở trạng thái chờ gửi xưởng' });
+    }
+
+    const updateItemStmt = db.prepare("UPDATE order_items SET status = 'PRINTING' WHERE id = ?");
+    const checkOrderStmt = db.prepare("SELECT status FROM orders WHERE id = ?");
+    const updateOrderStmt = db.prepare("UPDATE orders SET status = 'IN_PRODUCTION', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+
+    const orderIds = new Set();
+    const transaction = db.transaction(() => {
+      for (const it of itemsToUpdate) {
+        updateItemStmt.run(it.id);
+        orderIds.add(it.order_id);
+      }
+
+      for (const orderId of orderIds) {
+        const order = checkOrderStmt.get(orderId);
+        if (order && ['DRAFT', 'ORDER_CONFIRMED', 'QUOTE_SENT'].includes(order.status)) {
+          updateOrderStmt.run(orderId);
+        }
+      }
+    });
+
+    transaction();
+
+    res.json({
+      success: true,
+      count: itemsToUpdate.length,
+      updated_items: itemsToUpdate.map(it => it.id),
+      affected_orders: Array.from(orderIds)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/suppliers', (req, res) => {
   try {
     const { name, phone, address, specialties, vat_supported, bank_info, notes } = req.body;

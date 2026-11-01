@@ -497,8 +497,8 @@
         <!-- ==================== TAB 3: BÁO GIÁ & ĐƠN HÀNG ==================== -->
         <section class="tab-view" id="tab-orders">
           <div class="card-panel">
-            <div class="panel-header">
-              <div style="display: flex; align-items: center; gap: 14px;">
+            <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
+              <div style="display: flex; align-items: center; gap: 14px; flex-wrap:wrap;">
                 <h2 class="panel-title">📋 Quản Lý Báo Giá & Đơn Hàng</h2>
                 <!-- Filter Tabs -->
                 <div class="filter-tabs" style="margin-bottom: 0;">
@@ -510,9 +510,14 @@
                   <button class="filter-btn" data-filter-status="COMPLETED">Hoàn Thành</button>
                 </div>
               </div>
-              <button class="btn btn-primary" onclick="App.openNewOrderModal()">
-                + Tạo Đơn Hàng Mới [N]
-              </button>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-secondary btn-sm" onclick="App.exportOrdersExcel()" title="Xuất danh sách đơn hàng ra file Excel">
+                  📥 Xuất Excel
+                </button>
+                <button class="btn btn-primary" onclick="App.openNewOrderModal()">
+                  + Tạo Đơn Hàng Mới [N]
+                </button>
+              </div>
             </div>
 
             <div class="table-responsive">
@@ -543,17 +548,81 @@
 
         <!-- ==================== TAB 4: XƯỞNG IN & SRM ==================== -->
         <section class="tab-view" id="tab-suppliers">
+          <!-- Phân hệ 1: Danh sách lệnh chuyển qua xưởng in & Action gửi xưởng -->
+          <div class="card-panel" style="margin-bottom: 24px;">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 class="panel-title">📋 Lệnh Chuyển Qua Xưởng In & Điều Phối Sản Xuất</h2>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                  Gôm nhóm các lệnh theo từng xưởng in đối tác và thực hiện <strong>Gửi xưởng 1 lần</strong> cùng lúc.
+                </p>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- Nút chuyển đổi chế độ xem -->
+                <div style="display: inline-flex; background: var(--bg-surface); padding: 2px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                  <button type="button" id="btn-view-grouped" class="btn btn-sm btn-primary" onclick="App.setSupplierJobsView('grouped')" style="font-size: 12px; padding: 4px 10px;">🏭 Gôm Theo Xưởng</button>
+                  <button type="button" id="btn-view-flat" class="btn btn-sm btn-secondary" onclick="App.setSupplierJobsView('flat')" style="font-size: 12px; padding: 4px 10px;">📄 Danh Sách Chi Tiết</button>
+                </div>
+                <select id="supplier-jobs-filter-sup" class="form-control" style="width: auto; font-size: 12.5px; padding: 5px 10px;" onchange="App.loadSupplierJobs()">
+                  <option value="ALL">-- Tất cả xưởng in --</option>
+                </select>
+                <select id="supplier-jobs-filter-status" class="form-control" style="width: auto; font-size: 12.5px; padding: 5px 10px;" onchange="App.loadSupplierJobs()">
+                  <option value="ALL">-- Tất cả trạng thái --</option>
+                  <option value="PENDING">Chờ gửi xưởng (PENDING)</option>
+                  <option value="PRINTING">Đang in tại xưởng (PRINTING)</option>
+                  <option value="DONE">Đã in xong (DONE)</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="App.exportSupplierJobsExcel()" title="Xuất danh sách lệnh chuyển xưởng ra Excel">📥 Xuất Excel</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.loadSupplierJobs()">🔄 Tải Lại</button>
+              </div>
+            </div>
+
+            <!-- Vùng hiển thị Gôm nhóm theo xưởng in -->
+            <div id="supplier-jobs-grouped-container" style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
+              <!-- Render động theo xưởng in -->
+            </div>
+
+            <!-- Vùng hiển thị Dạng bảng phẳng chi tiết -->
+            <div id="supplier-jobs-flat-container" class="table-responsive" style="margin-top: 12px; display: none;">
+              <table class="data-table" id="supplier-jobs-table">
+                <thead>
+                  <tr>
+                    <th>Mã Đơn / Ngày</th>
+                    <th>Xưởng Gia Công</th>
+                    <th>Tên Ấn Phẩm & Quy Cách</th>
+                    <th style="text-align: center;">SL</th>
+                    <th>File In</th>
+                    <th>Hạn Giao</th>
+                    <th class="col-cost-profit" style="text-align: right;">Tiền Gia Công</th>
+                    <th style="text-align: center;">Trạng Thái</th>
+                    <th style="text-align: center;">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody id="supplier-jobs-table-tbody">
+                  <tr>
+                    <td colspan="9" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải danh sách lệnh in...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Phân hệ 2: Danh sách nhà cung cấp & xưởng in đối tác -->
           <div class="card-panel">
-            <div class="panel-header">
+            <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
               <div>
                 <h2 class="panel-title">🏭 Danh Sách Nhà Cung Cấp & Xưởng In Đối Tác</h2>
                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
                   Mô hình thương mại in ấn: Tối ưu hóa điều phối từng hạng mục đến đúng xưởng có thế mạnh và giá tốt nhất.
                 </p>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="App.openNewSupplierModal()">
-                + Thêm Xưởng In Mới
-              </button>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-secondary btn-sm" onclick="App.exportSuppliersExcel()" title="Xuất danh sách xưởng ra Excel">📥 Xuất Excel</button>
+                <button class="btn btn-secondary btn-sm rbac-admin-coord" onclick="App.triggerImportSuppliers()" title="Nhập danh sách xưởng từ Excel">📤 Nhập Excel</button>
+                <button class="btn btn-primary btn-sm" onclick="App.openNewSupplierModal()">
+                  + Thêm Xưởng In Mới
+                </button>
+              </div>
             </div>
 
             <div id="suppliers-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-top: 14px;">
@@ -565,16 +634,20 @@
         <!-- ==================== TAB 5: KHÁCH HÀNG (CRM) ==================== -->
         <section class="tab-view" id="tab-customers">
           <div class="card-panel">
-            <div class="panel-header">
+            <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
               <div>
                 <h2 class="panel-title">👥 Quản Lý Khách Hàng (B2B & Khách Lẻ)</h2>
                 <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
                   Lưu trữ thông tin xuất VAT, danh sách người đặt hàng trực thuộc (ví dụ Texas, ITD) và chính sách chiết khấu riêng.
                 </p>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="App.openNewCustomerModal()">
-                + Thêm Khách Hàng Mới
-              </button>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-secondary btn-sm" onclick="App.exportCustomersExcel()" title="Xuất danh sách khách hàng ra Excel">📥 Xuất Excel</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.triggerImportCustomers()" title="Nhập danh sách khách hàng từ Excel">📤 Nhập Excel</button>
+                <button class="btn btn-primary btn-sm" onclick="App.openNewCustomerModal()">
+                  + Thêm Khách Hàng Mới
+                </button>
+              </div>
             </div>
 
             <div class="table-responsive">
@@ -729,6 +802,7 @@
             <button class="filter-btn" data-admin-sub="template">🖨️ Thông Tin Mẫu In</button>
             <button class="filter-btn" data-admin-sub="prices">💲 Bảng Giá Vật Tư & Gia Công</button>
             <button class="filter-btn" data-admin-sub="pricecheck">✅ Kiểm Tra & Lịch Sử Giá</button>
+            <button class="filter-btn" data-admin-sub="backup">💾 Sao Lưu & Khôi Phục Dữ Liệu</button>
           </div>
 
           <!-- USERS -->
@@ -856,6 +930,56 @@
                   <thead><tr><th>Thời gian</th><th>Người sửa</th><th>Hạng mục</th><th>Giá cũ</th><th>Giá mới</th><th>Chênh lệch</th></tr></thead>
                   <tbody id="admin-price-history-tbody"></tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- BACKUP & RESTORE DATABASE (Dành cho Admin) -->
+          <div class="admin-sub" id="admin-sub-backup" style="display:none;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+              <!-- Panel Sao lưu -->
+              <div class="card-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">💾 Sao Lưu Cơ Sở Dữ Liệu (Backup)</h2>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                      Tải toàn bộ cơ sở dữ liệu SQLite (.db) về máy tính để lưu trữ an toàn hoặc chuyển server.
+                    </p>
+                  </div>
+                </div>
+                <div style="font-size:13px; line-height:1.7; color:var(--text-dim); margin-bottom:18px;">
+                  <div>• Bản sao lưu chứa đầy đủ: <strong>Đơn hàng, Báo giá, Khách hàng, Xưởng in, Thu chi dòng tiền, Người dùng và Cấu hình bảng giá</strong>.</div>
+                  <div>• Sử dụng cơ chế <em>Online Backup</em> an toàn, không gián đoạn giao dịch đang chạy.</div>
+                  <div>• Khuyến nghị: Thực hiện tải backup định kỳ hoặc trước khi cập nhật nâng cấp hệ thống.</div>
+                </div>
+                <div id="admin-db-info" style="background:var(--bg-surface); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); margin-bottom:18px; font-size:12px;">
+                  Đang tải thông tin cơ sở dữ liệu...
+                </div>
+                <button class="btn btn-primary" onclick="Admin.downloadBackup()" style="font-weight:600; width:100%;">
+                  📥 TẢI VỀ BẢN SAO LƯU (.DB)
+                </button>
+              </div>
+
+              <!-- Panel Khôi phục -->
+              <div class="card-panel">
+                <div class="panel-header">
+                  <div>
+                    <h2 class="panel-title">🔄 Khôi Phục Dữ Liệu (Restore)</h2>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                      Nạp file .db đã sao lưu trước đó để phục hồi dữ liệu khi chuyển server hoặc gặp sự cố.
+                    </p>
+                  </div>
+                </div>
+                <div style="font-size:13px; line-height:1.7; color:var(--accent-rose); margin-bottom:14px; background:rgba(244, 63, 94, 0.08); padding:12px; border-radius:var(--radius-sm); border:1px solid rgba(244, 63, 94, 0.25);">
+                  ⚠️ <strong>Cảnh báo quan trọng:</strong> Khôi phục sẽ thay thế dữ liệu hiện tại bằng dữ liệu trong file backup. Hệ thống sẽ tự động tạo một bản dự phòng tức thời trước khi khôi phục để bảo vệ an toàn.
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Chọn file sao lưu SQLite (*.db)</label>
+                  <input type="file" id="admin-restore-file" class="form-control" accept=".db,.sqlite,.sqlite3" style="padding:6px;">
+                </div>
+                <button class="btn btn-accent" onclick="Admin.restoreBackup()" style="font-weight:600; width:100%; margin-top:10px;">
+                  ⚡ TIẾN HÀNH KHÔI PHỤC DỮ LIỆU
+                </button>
               </div>
             </div>
           </div>
