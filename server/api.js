@@ -40,6 +40,17 @@ router.use('/customers/:id', (req, res, next) => {
 // ==========================================
 // 1. DASHBOARD & STATS
 // ==========================================
+router.get('/settings', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT key, value FROM settings').all();
+    const out = {};
+    rows.forEach(r => { out[r.key] = r.value; });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/stats', (req, res) => {
   try {
     const salesOnly = isSalesUser(req);

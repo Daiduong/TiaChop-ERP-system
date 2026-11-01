@@ -12,6 +12,7 @@ const App = {
     customers: [],
     suppliers: [],
     orders: [],
+    settings: {}, // Cấu hình công ty (hotline, tên cty...)
     supplierJobs: [], // Cache danh sách lệnh in của xưởng
     supplierJobsView: 'grouped', // 'grouped' hoặc 'flat'
     filters: {
@@ -306,12 +307,24 @@ const App = {
   async loadInitialData() {
     try {
       await Promise.all([
+        this.loadSettings(),
         this.loadCustomers(),
         this.loadSuppliers(),
         this.loadDashboard()
       ]);
     } catch (err) {
       console.error('Error loading initial data:', err);
+    }
+  },
+
+  async loadSettings() {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        this.state.settings = await res.json();
+      }
+    } catch (e) {
+      console.error('Error loading settings:', e);
     }
   },
 
@@ -758,9 +771,16 @@ const App = {
 
     const p = this.state.currentPricingCalc;
     const input = this.collectPricingInput();
-    const settings = (window.Admin && Admin.settings) || {};
+    const settings = this.state.settings || (window.Admin && Admin.settings) || {};
     const companyName = settings.company_name || 'IN TIA CHỚP';
-    const hotline = settings.company_hotline || '0903 000 000';
+    
+    // Ưu tiên SĐT của user đang đăng nhập (nhân viên kinh doanh/tư vấn), nếu không có thì lấy hotline công ty
+    const currentUserPhone = this.state.currentUser?.phone;
+    const currentUserName = this.state.currentUser?.full_name;
+    const hotline = currentUserPhone || settings.company_hotline || '0917 667 937';
+    const supportContactText = currentUserPhone 
+      ? `${currentUserPhone} (${currentUserName || 'Tư vấn viên'})`
+      : hotline;
 
     let paperText = '';
     if (input.group === 'DIGITAL') paperText = `Giấy ${input.paper || 'C150'}`;
@@ -795,7 +815,7 @@ ${cleanSpecs ? `✨ Quy cách: ${cleanSpecs}\n` : ''}🛡️ Màng: ${lamText}${
 💵 TỔNG TIỀN: ${this.formatCurrency(p.suggestedSellingPrice)} (chưa gồm VAT)
 ━━━━━━━━━━━━━━━━━━━━━━
 ⏱️ Thời gian sản xuất: 1 - 2 ngày làm việc
-📞 Hotline / Zalo hỗ trợ: ${hotline}
+📞 Hotline / Zalo hỗ trợ: ${supportContactText}
 Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
     try {
