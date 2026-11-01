@@ -701,6 +701,18 @@ const App = {
     `;
   },
 
+  // Helper: Lọc bỏ thông tin kỹ thuật nội bộ xưởng (khổ in, lượt in, màu kẽm...) để không lộ cho khách
+  cleanSpecsForCustomer(specs) {
+    if (!specs) return '';
+    return specs
+      .replace(/,?\s*in\s+(?:4\/[04]|1\/[01]|2\/[02]|trở nhíp|\d+\s*màu[^\,\;]*)/gi, '')
+      .replace(/,?\s*(?:tờ in\s*)?Khổ\s*[\d\.\,x\s]+(?:cm|mm)/gi, '')
+      .replace(/,?\s*khổ cuộn\s*[\d\.\,x\s]+(?:cm|mm)/gi, '')
+      .replace(/\s*,\s*,+/g, ', ')
+      .replace(/^\s*,\s*|\s*,\s*$/g, '')
+      .trim();
+  },
+
   // Chuyển kết quả tính giá sang modal tạo đơn hàng (1 click)
   transferPricingToOrder() {
     if (!this.state.currentPricingCalc) return;
@@ -713,9 +725,13 @@ const App = {
     else if (input.group === 'OFFSET') paper = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
     else paper = input.material;
 
-    let specs = `[${p.groupLabel}] ${p.specs}`;
+    // Quy cách gửi khách hàng: loại bỏ thông tin kỹ thuật xưởng
+    let specs = `[${p.groupLabel}] ${this.cleanSpecsForCustomer(p.specs) || p.specs}`;
     if (input.lamination && input.lamination !== 'NONE') specs += `, cán ${input.lamination.startsWith('MATTE') ? 'mờ' : 'bóng'} ${input.lamination.endsWith('_1S') ? '1' : '2'} mặt`;
     if (input.finishing.length) specs += `, gia công: ${input.finishing.join(', ')}`;
+
+    // Thông tin kỹ thuật nội bộ xưởng & bình bài
+    const technicalWorkshopInfo = `[${p.specs}] | ${p.impositionNote || ''}`;
 
     this.openNewOrderModal({
       items: [{
@@ -725,13 +741,95 @@ const App = {
         unit: p.baseUnit,
         paper_gsm: paper,
         specs,
-        imposition_info: p.impositionNote,
+        imposition_info: technicalWorkshopInfo,
         supplier_id: supplierId,
         unit_cost: p.unitCost,
         unit_price: p.unitPrice,
         file_url: ''
       }]
     });
+  },
+
+  // Copy nội dung báo giá nhanh để gửi khách hàng qua Zalo / Tin nhắn / Email
+  async copyPricingQuote() {
+    if (!this.state.currentPricingCalc) {
+      return alert('Chưa có kết quả tính giá để copy!');
+    }
+
+    const p = this.state.currentPricingCalc;
+    const input = this.collectPricingInput();
+    const settings = (window.Admin && Admin.settings) || {};
+    const companyName = settings.company_name || 'IN TIA CHỚP';
+    const hotline = settings.company_hotline || '0903 000 000';
+
+    let paperText = '';
+    if (input.group === 'DIGITAL') paperText = `Giấy ${input.paper || 'C150'}`;
+    else if (input.group === 'OFFSET') paperText = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
+    else paperText = input.material || 'Bạt / Decal';
+
+    let lamText = 'Không cán';
+    if (input.lamination && input.lamination !== 'NONE') {
+      const type = input.lamination.startsWith('MATTE') ? 'màng mờ' : 'màng bóng';
+      const side = input.lamination.endsWith('_1S') ? '1 mặt' : '2 mặt';
+      lamText = `Cán ${type} ${side}`;
+    }
+
+    let finishText = '';
+    if (input.finishing && input.finishing.length) {
+      finishText = `\n• Gia công: ${input.finishing.join(', ')}`;
+    }
+
+    // Loại bỏ thông tin kỹ thuật xưởng "in 4/4, Khổ ..." khi gửi cho khách
+    const cleanSpecs = this.cleanSpecsForCustomer(p.specs);
+
+    const quoteText = 
+`⚡ BÁO GIÁ IN ẤN - ${companyName.toUpperCase()}
+━━━━━━━━━━━━━━━━━━━━━━
+📦 Sản phẩm: ${p.productName}
+📐 Kích thước: ${input.width} × ${input.height} mm
+🔢 Số lượng: ${this.formatNumber(p.quantity)} ${p.baseUnit}
+📄 Chất liệu: ${paperText}
+${cleanSpecs ? `✨ Quy cách: ${cleanSpecs}\n` : ''}🛡️ Màng: ${lamText}${finishText}
+━━━━━━━━━━━━━━━━━━━━━━
+💰 Đơn giá: ${this.formatCurrency(p.unitPrice)} / ${p.baseUnit}
+💵 TỔNG TIỀN: ${this.formatCurrency(p.suggestedSellingPrice)} (chưa gồm VAT)
+━━━━━━━━━━━━━━━━━━━━━━
+⏱️ Thời gian sản xuất: 1 - 2 ngày làm việc
+📞 Hotline / Zalo hỗ trợ: ${hotline}
+Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(quoteText);
+      } else {
+        // Fallback cho trình duyệt cũ
+        const ta = document.createElement('textarea');
+        ta.value = quoteText;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+
+      // Hiệu ứng đổi nhãn nút tạm thời
+      const btn = document.getElementById('btn-copy-pricing-quote');
+      if (btn) {
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '✅ ĐÃ COPY BÁO GIÁ!';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-accent');
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.classList.remove('btn-accent');
+          btn.classList.add('btn-secondary');
+        }, 2200);
+      }
+    } catch (err) {
+      alert('Không thể tự động copy: ' + err.message + '\n\nNội dung:\n' + quoteText);
+    }
   },
 
   // ==========================================
@@ -1181,7 +1279,7 @@ const App = {
 
         <div style="display:grid; grid-template-columns: ${isSales ? '1fr' : '2fr 1.5fr 1.5fr'}; gap:10px; margin-top:10px;">
           <div>
-            <label class="form-label" style="font-size:11px;">Quy Cách Kỹ Thuật (Khổ, Giấy, Màng...)</label>
+            <label class="form-label" style="font-size:11px;">Quy Cách Kỹ Thuật (Báo Cho Khách)</label>
             <input type="text" class="form-control item-specs" value="${data.specs || ''}" placeholder="C300, cán màng mờ 2 mặt...">
           </div>
           ${!isSales ? `
@@ -1201,6 +1299,15 @@ const App = {
           <input type="hidden" class="item-file" value="">
           `}
         </div>
+
+        ${!isSales ? `
+        <div style="margin-top:8px;">
+          <label class="form-label" style="font-size:11px; color:var(--primary-light);">📐 Quy Cách Kỹ Thuật Xưởng & Bình Bài (Ẩn Với Khách - Chỉ Gửi Xưởng)</label>
+          <input type="text" class="form-control item-imposition" value="${data.imposition_info || ''}" placeholder="Khổ in, trở nhíp, bình bài, số con/tờ, chạy kẽm...">
+        </div>
+        ` : `
+        <input type="hidden" class="item-imposition" value="${data.imposition_info || ''}">
+        `}
       </div>
     `;
 
@@ -1264,6 +1371,7 @@ const App = {
           unit_cost: parseFloat(r.querySelector('.item-cost').value) || 0,
           unit_price: parseFloat(r.querySelector('.item-price').value) || 0,
           specs: r.querySelector('.item-specs').value || '',
+          imposition_info: r.querySelector('.item-imposition')?.value || '',
           supplier_id: r.querySelector('.item-supplier').value || null,
           file_url: r.querySelector('.item-file').value || ''
         });
@@ -2112,7 +2220,7 @@ const App = {
               <td style="text-align:center;">${idx + 1}</td>
               <td>
                 <strong>${it.item_name}</strong>
-                <div style="font-size:9pt; color:#555;">${it.specs || ''}</div>
+                <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || ''}</div>
               </td>
               <td style="text-align:center;">${it.quantity}</td>
               <td style="text-align:center;">${it.unit}</td>
