@@ -66,6 +66,12 @@ function initDatabase() {
       status TEXT NOT NULL DEFAULT 'DRAFT', -- DRAFT, QUOTE_SENT, ORDER_CONFIRMED, IN_PRODUCTION, PRODUCED, DELIVERING, DELIVERED, COMPLETED, CANCELLED
       delivery_deadline DATE,
       shipping_address TEXT,
+      shipping_fee REAL DEFAULT 0,
+      shipping_method TEXT, -- Ahamove, Grab, ViettelPost, GHTK, Xe ôm, Giao hàng trực tiếp, Khách tự lấy
+      tracking_code TEXT,
+      recipient_name TEXT,
+      recipient_phone TEXT,
+      delivery_notes TEXT,
       vat_rate REAL DEFAULT 0, -- 0, 8, 10
       vat_amount REAL DEFAULT 0,
       vat_invoiced_at DATE,
@@ -154,10 +160,29 @@ function initDatabase() {
   `);
 
   ensureOwnerColumns();
+  ensureDeliveryColumns();
 
   // Seed dữ liệu mẫu ban đầu (đã tắt khi lên production)
   // seedInitialData();
   ensurePricingMatrixConfigs();
+}
+
+// Cột quản lý giao hàng & phí giao hàng trong orders
+function ensureDeliveryColumns() {
+  const deliveryCols = [
+    { name: 'shipping_fee', type: 'REAL DEFAULT 0' },
+    { name: 'shipping_method', type: 'TEXT' },
+    { name: 'tracking_code', type: 'TEXT' },
+    { name: 'recipient_name', type: 'TEXT' },
+    { name: 'recipient_phone', type: 'TEXT' },
+    { name: 'delivery_notes', type: 'TEXT' }
+  ];
+  const existingCols = db.prepare('PRAGMA table_info(orders)').all();
+  deliveryCols.forEach(col => {
+    if (!existingCols.some(c => c.name === col.name)) {
+      db.exec(`ALTER TABLE orders ADD COLUMN ${col.name} ${col.type}`);
+    }
+  });
 }
 
 // Cột chủ sở hữu (user tạo) để phân quyền dữ liệu cho Sales. Dữ liệu cũ = NULL → chỉ Admin thấy.
@@ -234,7 +259,21 @@ function ensurePricingMatrixConfigs() {
     ['LARGE_FORMAT', 'QC - Hộp đèn', 'LF_LIGHTBOX_M2', 1200000, 'm²'],
     ['LARGE_FORMAT', 'QC - Lắp đặt', 'LF_INSTALL_M2', 50000, 'm²'],
     ['LARGE_FORMAT', 'QC - Lắp đặt tối thiểu', 'LF_INSTALL_MIN', 300000, 'đơn'],
-    ['LARGE_FORMAT', 'QC - Giá tối thiểu mỗi đơn', 'LF_MIN_ORDER', 100000, 'đơn']
+    ['LARGE_FORMAT', 'QC - Giá tối thiểu mỗi đơn', 'LF_MIN_ORDER', 100000, 'đơn'],
+    // Nhóm 4 - In tài liệu & Đóng lò xo xoắn
+    ['DOCUMENT', 'Tài liệu - Bìa cứng + Đóng lò xo + Đóng kính (Khổ A4)', 'DOC_A4_HARD_SPIRAL_GLASS', 20000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa cứng + Đóng lò xo (Khổ A4)', 'DOC_A4_HARD_SPIRAL', 16000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa cứng + Đóng lò xo (Khổ A5)', 'DOC_A5_HARD_SPIRAL', 12000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa mềm + Đóng lò xo (Khổ A4)', 'DOC_A4_SOFT_SPIRAL', 10000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa mềm + Đóng lò xo + Đóng kính (Khổ A4)', 'DOC_A4_SOFT_SPIRAL_GLASS', 14000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa mềm + Đóng lò xo (Khổ A5)', 'DOC_A5_SOFT_SPIRAL', 8500, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Bìa mềm + Đóng lò xo + Đóng kính (Khổ A5)', 'DOC_A5_SOFT_SPIRAL_GLASS', 11500, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - Phụ thu lò xo ruột dày (>100 tờ)', 'DOC_SPIRAL_SURCHARGE_THICK', 3000, 'cuốn'],
+    ['DOCUMENT', 'Tài liệu - In thêm bìa mặt sau', 'DOC_BACK_COVER_PRINT', 2000, 'cuốn'],
+    ['DOCUMENT', 'Ruột F80 trắng đen 2 mặt (Khổ A4)', 'DOC_RUOT_A4_BW_2S', 350, 'tờ'],
+    ['DOCUMENT', 'Ruột F80 trắng đen 1 mặt (Khổ A4)', 'DOC_RUOT_A4_BW_1S', 250, 'tờ'],
+    ['DOCUMENT', 'Ruột F80 trắng đen 2 mặt (Khổ A5)', 'DOC_RUOT_A5_BW_2S', 200, 'tờ'],
+    ['DOCUMENT', 'Ruột F80 trắng đen 1 mặt (Khổ A5)', 'DOC_RUOT_A5_BW_1S', 225, 'tờ']
   ];
   const exists = db.prepare('SELECT 1 FROM print_configs WHERE code = ?');
   rows.forEach(([cat, name, code, cost, unit]) => {

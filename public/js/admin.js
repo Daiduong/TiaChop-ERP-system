@@ -15,7 +15,15 @@ window.Admin = {
   },
 
   CATEGORY_LABEL: {
-    BASE_SIZE: '📐 Khổ in', PRINT_RUN: '🖨️ Lượt in', PAPER: '📄 Giấy', FINISHING: '✂️ Gia công'
+    BASE_SIZE: '📐 Khổ in',
+    PRINT_RUN: '🖨️ Lượt in',
+    PAPER: '📄 Giấy',
+    FINISHING: '✂️ Gia công',
+    DOCUMENT: '📚 Đóng cuốn tài liệu',
+    GENERAL: '⚙️ Chung & Phân bổ',
+    DIGITAL: '🖨️ KTS Thông số',
+    OFFSET: '🏭 Offset Thông số',
+    LARGE_FORMAT: '🪧 Bạt/Quảng cáo'
   },
 
   init() {
@@ -196,14 +204,31 @@ window.Admin = {
   // ================= BẢNG GIÁ =================
   async loadPrices() {
     this.prices = await this.api('/price-configs');
-    document.getElementById('admin-prices-tbody').innerHTML = this.prices.map(p => `
+    document.getElementById('admin-prices-tbody').innerHTML = this.prices.map(p => {
+      const isBaseSizeOrPct = p.category === 'BASE_SIZE' || p.unit === '%';
+      const cost = Number(p.base_cost) || 0;
+      // Giá bán gợi ý với Margin 40%: Giá bán = Giá vốn / (1 - 0.4)
+      const sellingSuggested = isBaseSizeOrPct || cost <= 0 ? '—' : Math.round(cost / 0.6).toLocaleString('vi-VN') + ' đ';
+      return `
       <tr data-id="${p.id}">
-        <td>${this.CATEGORY_LABEL[p.category] || p.category}</td>
+        <td><span class="badge ${p.category === 'DOCUMENT' ? 'badge-producing' : 'badge-draft'}">${this.CATEGORY_LABEL[p.category] || p.category}</span></td>
         <td><code style="font-size:11px; color:var(--text-dim);">${this.esc(p.code)}</code></td>
         <td><input class="form-control price-name" value="${this.esc(p.name)}" style="min-width:240px;"></td>
-        <td><input type="number" min="0" step="50" class="form-control price-cost" value="${p.base_cost}" style="width:130px;" ${p.category === 'BASE_SIZE' ? 'disabled' : ''}></td>
+        <td><input type="number" min="0" step="50" class="form-control price-cost" value="${p.base_cost}" style="width:130px;" ${p.category === 'BASE_SIZE' ? 'disabled' : ''} oninput="Admin.updateRowSellingPrice(this)"></td>
         <td><input class="form-control price-unit" value="${this.esc(p.unit)}" style="width:110px;"></td>
-      </tr>`).join('');
+        <td style="text-align:right; font-weight:600; color:var(--accent-green);" class="row-selling-price">${sellingSuggested}</td>
+      </tr>`;
+    }).join('');
+  },
+
+  updateRowSellingPrice(inputEl) {
+    const tr = inputEl.closest('tr');
+    if (!tr) return;
+    const cost = Number(inputEl.value) || 0;
+    const targetTd = tr.querySelector('.row-selling-price');
+    if (targetTd) {
+      targetTd.textContent = cost > 0 ? Math.round(cost / 0.6).toLocaleString('vi-VN') + ' đ' : '—';
+    }
   },
 
   // Gom các đơn giá đang sửa trên bảng (chưa lưu): { CODE: giá mới }

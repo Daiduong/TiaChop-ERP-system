@@ -460,6 +460,12 @@ router.post('/orders', (req, res) => {
       contact_id,
       delivery_deadline,
       shipping_address,
+      shipping_fee = 0,
+      shipping_method = '',
+      tracking_code = '',
+      recipient_name = '',
+      recipient_phone = '',
+      delivery_notes = '',
       vat_rate = 8,
       discount_amount = 0,
       deposit_amount = 0,
@@ -491,7 +497,8 @@ router.post('/orders', (req, res) => {
     const finalSellingAfterDiscount = Math.max(0, total_selling - parsedDiscount);
     const parsedVatRate = parseFloat(vat_rate) || 0;
     const vat_amount = (finalSellingAfterDiscount * parsedVatRate) / 100;
-    const grand_total = finalSellingAfterDiscount + vat_amount;
+    const parsedShippingFee = Math.max(0, parseFloat(shipping_fee) || 0);
+    const grand_total = finalSellingAfterDiscount + vat_amount + parsedShippingFee;
 
     const gross_profit = finalSellingAfterDiscount - total_cost;
     const parsedDeposit = parseFloat(deposit_amount) || 0;
@@ -509,13 +516,15 @@ router.post('/orders', (req, res) => {
     const insertOrder = db.prepare(`
       INSERT INTO orders (
         id, code, type, customer_id, contact_id, status, delivery_deadline, shipping_address,
+        shipping_fee, shipping_method, tracking_code, recipient_name, recipient_phone, delivery_notes,
         vat_rate, vat_amount, discount_amount, total_selling, total_cost, gross_profit,
         deposit_amount, remaining_amount, payment_status, notes, created_by, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insertOrder.run(
       id, code, type, customer_id, contact_id || null, initialStatus, delivery_deadline || null, shipping_address || '',
+      parsedShippingFee, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost, gross_profit,
       parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trân', req.user?.id || null
     );
@@ -575,6 +584,12 @@ router.put('/orders/:id', (req, res) => {
       contact_id,
       delivery_deadline,
       shipping_address,
+      shipping_fee = 0,
+      shipping_method = '',
+      tracking_code = '',
+      recipient_name = '',
+      recipient_phone = '',
+      delivery_notes = '',
       vat_rate = 8,
       discount_amount = 0,
       notes = '',
@@ -595,7 +610,8 @@ router.put('/orders/:id', (req, res) => {
     const finalSellingAfterDiscount = Math.max(0, total_selling - parsedDiscount);
     const parsedVatRate = parseFloat(vat_rate) || 0;
     const vat_amount = (finalSellingAfterDiscount * parsedVatRate) / 100;
-    const grand_total = finalSellingAfterDiscount + vat_amount;
+    const parsedShippingFee = Math.max(0, parseFloat(shipping_fee) || 0);
+    const grand_total = finalSellingAfterDiscount + vat_amount + parsedShippingFee;
     const gross_profit = finalSellingAfterDiscount - total_cost;
 
     // Tính lại số tiền còn nợ dựa trên deposit_amount hiện tại trong DB
@@ -612,12 +628,14 @@ router.put('/orders/:id', (req, res) => {
     db.prepare(`
       UPDATE orders SET
         customer_id = ?, contact_id = ?, delivery_deadline = ?, shipping_address = ?,
+        shipping_fee = ?, shipping_method = ?, tracking_code = ?, recipient_name = ?, recipient_phone = ?, delivery_notes = ?,
         vat_rate = ?, vat_amount = ?, discount_amount = ?, total_selling = ?, total_cost = ?,
         gross_profit = ?, remaining_amount = ?, payment_status = ?, notes = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       customer_id, contact_id || null, delivery_deadline || null, shipping_address || '',
+      parsedShippingFee, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost,
       gross_profit, remaining_amount, payment_status, notes,
       req.params.id
@@ -661,6 +679,76 @@ router.patch('/orders/:id/status', (req, res) => {
     const { status } = req.body;
     db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
     res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật thông tin giao vận (đơn vị ship, mã vận đơn, phí ship, ghi chú)
+router.patch('/orders/:id/delivery', (req, res) => {
+  try {
+    const {
+      status,
+      shipping_fee,
+      shipping_method,
+      tracking_code,
+      recipient_name,
+      recipient_phone,
+      shipping_address,
+      delivery_notes
+    } = req.body;
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    // Nếu có cập nhật shipping_fee thì tính lại grand_total và remaining_amount
+    let newGrandTotal = order.total_selling;
+    let newRemaining = order.remaining_amount;
+    let parsedFee = order.shipping_fee || 0;
+
+    if (shipping_fee !== undefined && shipping_fee !== null) {
+      const oldFee = order.shipping_fee || 0;
+      parsedFee = Math.max(0, parseFloat(shipping_fee) || 0);
+      const feeDiff = parsedFee - oldFee;
+      newGrandTotal = Math.max(0, order.total_selling + feeDiff);
+
+      const totalPaid = db.prepare(`
+        SELECT COALESCE(SUM(amount), 0) as paid FROM transactions WHERE order_id = ? AND type LIKE 'INCOME%'
+      `).get(req.params.id)?.paid || 0;
+      newRemaining = Math.max(0, newGrandTotal - totalPaid);
+    }
+
+    const newStatus = status || order.status;
+
+    db.prepare(`
+      UPDATE orders SET
+        status = ?,
+        shipping_fee = ?,
+        shipping_method = COALESCE(?, shipping_method),
+        tracking_code = COALESCE(?, tracking_code),
+        recipient_name = COALESCE(?, recipient_name),
+        recipient_phone = COALESCE(?, recipient_phone),
+        shipping_address = COALESCE(?, shipping_address),
+        delivery_notes = COALESCE(?, delivery_notes),
+        total_selling = ?,
+        remaining_amount = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      newStatus,
+      parsedFee,
+      shipping_method !== undefined ? shipping_method : null,
+      tracking_code !== undefined ? tracking_code : null,
+      recipient_name !== undefined ? recipient_name : null,
+      recipient_phone !== undefined ? recipient_phone : null,
+      shipping_address !== undefined ? shipping_address : null,
+      delivery_notes !== undefined ? delivery_notes : null,
+      newGrandTotal,
+      newRemaining,
+      req.params.id
+    );
+
+    res.json({ success: true, id: req.params.id, status: newStatus, shipping_fee: parsedFee });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

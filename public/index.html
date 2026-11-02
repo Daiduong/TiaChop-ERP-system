@@ -264,6 +264,7 @@
                 <button type="button" class="filter-btn active" data-pricing-group="DIGITAL" id="pg-digital">🖨️ In nhanh KTS</button>
                 <button type="button" class="filter-btn" data-pricing-group="OFFSET" id="pg-offset">🏭 In offset</button>
                 <button type="button" class="filter-btn" data-pricing-group="LARGE_FORMAT" id="pg-large">🪧 In quảng cáo</button>
+                <button type="button" class="filter-btn" data-pricing-group="DOCUMENT_SPIRAL" id="pg-doc-spiral">📚 Tài liệu & Đóng lò xo</button>
               </div>
 
               <div class="form-row">
@@ -435,6 +436,65 @@
                 </div>
               </div>
 
+              <!-- NHÓM 4: TÀI LIỆU & ĐÓNG LÒ XO XOẮN -->
+              <div class="pricing-group-fields" data-group="DOCUMENT_SPIRAL" style="display:none;">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Khổ thành phẩm</label>
+                    <select id="calc-doc-size" class="form-control">
+                      <option value="A5" selected>A5 (14.8 × 21 cm)</option>
+                      <option value="A4">A4 (21 × 29.7 cm)</option>
+                      <option value="A3">A3 (29.7 × 42 cm)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Số trang ruột (trang)</label>
+                    <input type="number" id="calc-doc-pages" class="form-control" value="67" min="1" step="1">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <label class="form-label" style="margin-bottom:0;">Chế độ in ruột (Giấy Fort 80gsm)</label>
+                    <span id="doc-ruot-price-tag" style="font-size:12px; font-weight:700; color:var(--accent-amber); background:rgba(245,158,11,0.1); padding:2px 8px; border-radius:4px; border:1px solid rgba(245,158,11,0.3);">350 đ/tờ</span>
+                  </div>
+                  <select id="calc-doc-ruot-print" class="form-control" style="margin-top:6px;">
+                    <option value="2 mặt Trắng Đen" selected>2 mặt Trắng Đen (A4: 350đ/tờ, A5: 200đ/tờ)</option>
+                    <option value="1 mặt Trắng Đen">1 mặt Trắng Đen (A4: 250đ/tờ, A5: 225đ/tờ)</option>
+                    <option value="2 mặt In Màu">2 mặt In Màu (A4: 2.800đ/tờ, A5: 1.500đ/tờ)</option>
+                    <option value="1 mặt In Màu">1 mặt In Màu (A4: 1.800đ/tờ, A5: 1.000đ/tờ)</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-top:10px;">
+                  <label class="form-label">Gói Bìa &amp; Gia công đóng cuốn (Bảng giá NCC)</label>
+                  <select id="calc-doc-binding-package" class="form-control">
+                    <option value="HARD_SPIRAL" selected>Bìa cứng + Đóng lò xo</option>
+                    <option value="HARD_SPIRAL_GLASS">Bìa cứng + Đóng lò xo + Đóng kính (Mica)</option>
+                    <option value="SOFT_SPIRAL">Bìa mềm + Đóng lò xo</option>
+                    <option value="SOFT_SPIRAL_GLASS">Bìa mềm + Đóng lò xo + Đóng kính (Mica)</option>
+                  </select>
+                </div>
+
+                <div class="form-row" style="margin-top:10px;">
+                  <div class="form-group">
+                    <label class="form-label">In bìa trước</label>
+                    <select id="calc-doc-front-print" class="form-control">
+                      <option value="In màu 1 mặt" selected>In màu 1 mặt (Đã gồm trong gói bìa)</option>
+                      <option value="Không in / Bìa trơn">Không in / Bìa trơn</option>
+                      <option value="In trắng đen 1 mặt">In trắng đen 1 mặt</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">In thêm bìa mặt sau</label>
+                    <select id="calc-doc-back-print" class="form-control">
+                      <option value="Không in / Bìa trơn" selected>Không in / Bìa trơn (+0đ)</option>
+                      <option value="In thêm bìa sau">In thêm bìa mặt sau (+2.000đ)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div class="form-row" style="margin-top: 14px;">
                 <div class="form-group rbac-admin-only" id="fg-calc-supplier">
                   <label class="form-label">Xưởng gia công dự kiến</label>
@@ -511,7 +571,9 @@
                   <button class="filter-btn" data-filter-type="QUOTE">Báo Giá</button>
                   <button class="filter-btn" data-filter-status="ORDER_CONFIRMED">Đã Chốt</button>
                   <button class="filter-btn" data-filter-status="IN_PRODUCTION">Đang In Xưởng</button>
-                  <button class="filter-btn" data-filter-status="DELIVERING">Đang Giao</button>
+                  <button class="filter-btn" data-filter-status="PRODUCED">Xưởng Xong</button>
+                  <button class="filter-btn" data-filter-status="DELIVERING">🚚 Đang Giao</button>
+                  <button class="filter-btn" data-filter-status="DELIVERED">📦 Đã Giao</button>
                   <button class="filter-btn" data-filter-status="COMPLETED">Hoàn Thành</button>
                 </div>
               </div>
@@ -886,8 +948,8 @@
           <div class="card-panel admin-sub" id="admin-sub-prices" style="display:none;">
             <div class="panel-header">
               <div>
-                <h2 class="panel-title">💲 Bảng Giá Vật Tư & Gia Công (Giá Vốn Xưởng)</h2>
-                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Đơn giá tại đây được dùng trực tiếp cho Bộ Tính Giá & Bình Bài. Sửa giá rồi bấm Lưu.</p>
+                <h2 class="panel-title">💲 Bảng Giá Vật Tư & Gia Công (Giá Vốn Xưởng &amp; Giá Bán Gợi Ý)</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Đơn giá tại đây được dùng trực tiếp cho Bộ Tính Giá & Bình Bài. Sửa giá vốn xưởng hoặc tỷ suất lợi nhuận rồi bấm Lưu.</p>
               </div>
               <div style="display:flex; gap:8px;">
                 <button class="btn btn-secondary btn-sm" onclick="Admin.previewImpact()">🔍 Xem Trước Tác động</button>
@@ -896,7 +958,7 @@
             </div>
             <div class="table-responsive">
               <table class="data-table">
-                <thead><tr><th>Nhóm</th><th>Mã</th><th>Tên Hạng Mục</th><th>Đơn Giá (đ)</th><th>Đơn Vị</th></tr></thead>
+                <thead><tr><th>Nhóm</th><th>Mã</th><th>Tên Hạng Mục</th><th>Giá Vốn NCC (đ)</th><th>Đơn Vị</th><th style="color:var(--accent-green); text-align:right;">Giá Bán Gợi Ý (Margin 40%)</th></tr></thead>
                 <tbody id="admin-prices-tbody"></tbody>
               </table>
             </div>
@@ -1066,6 +1128,41 @@
             <input type="text" id="form-order-address" class="form-control" placeholder="Nhập địa chỉ giao hàng cho khách...">
           </div>
 
+          <!-- Thông tin giao hàng & Phí ship -->
+          <div style="margin: 14px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; background: rgba(56, 189, 248, 0.04);">
+            <div style="font-size: 13px; font-weight: 700; color: var(--primary-light); margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+              <span>🚚 Thông Tin Vận Chuyển & Giao Hàng</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Người Nhận Hàng</label>
+                <input type="text" id="form-order-recipient-name" class="form-control" placeholder="Tên người nhận (để trống nếu là KH)">
+              </div>
+              <div class="form-group">
+                <label class="form-label">SĐT Người Nhận</label>
+                <input type="text" id="form-order-recipient-phone" class="form-control" placeholder="Số điện thoại nhận hàng">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top: 8px;">
+              <div class="form-group">
+                <label class="form-label">Hình Thức / Đơn Vị Vận Chuyển</label>
+                <select id="form-order-shipping-method" class="form-control">
+                  <option value="Khách tự lấy">Khách tự lấy tại xưởng</option>
+                  <option value="Ahamove" selected>Ahamove (Giao hỏa tốc)</option>
+                  <option value="Grab">Grab Express</option>
+                  <option value="Viettel Post">Viettel Post</option>
+                  <option value="Giao Hàng Tiết Kiệm">Giao Hàng Tiết Kiệm (GHTK)</option>
+                  <option value="Nhân viên giao">Nhân viên Tia Chớp giao</option>
+                  <option value="Xe ôm / Chành xe">Chành xe / Xe ôm</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mã Vận Đơn / Ghi Chú Giao Hàng</label>
+                <input type="text" id="form-order-tracking-code" class="form-control" placeholder="Mã theo dõi / BKS xe / dặn dò tài xế">
+              </div>
+            </div>
+          </div>
+
           <!-- Chi tiết sản phẩm in (Line Items) -->
           <div style="margin: 20px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 16px; background: rgba(0, 0, 0, 0.15);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -1094,6 +1191,10 @@
                 </select>
               </div>
               <div class="form-group">
+                <label class="form-label" style="color:var(--primary-light);">Phí Giao Hàng (đ)</label>
+                <input type="number" id="form-order-shipping-fee" class="form-control" value="0" min="0" step="1000" oninput="App.calculateOrderTotals()" placeholder="0">
+              </div>
+              <div class="form-group">
                 <label class="form-label">Tiền Khách Cọc Trước (đ)</label>
                 <input type="number" id="form-order-deposit" class="form-control" value="0" min="0" oninput="App.calculateOrderTotals()">
               </div>
@@ -1107,6 +1208,10 @@
               <div style="display: flex; justify-content: space-between;">
                 <span style="color: var(--text-muted);">Thuế VAT:</span>
                 <span id="order-calc-vat" style="font-weight: 600;">0 đ</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-muted);">Phí Vận Chuyển:</span>
+                <span id="order-calc-shipping-fee" style="font-weight: 600; color: var(--primary-light);">0 đ</span>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: var(--primary-light); border-top: 1px solid var(--border-subtle); padding-top: 6px;">
                 <span>Tổng Thanh Toán:</span>
@@ -1179,6 +1284,90 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
         <button type="button" class="btn btn-primary" onclick="App.submitPayment()">Xác Nhận Thu Tiền</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: QUẢN LÝ GIAO HÀNG (DELIVERY) ==================== -->
+  <div class="modal-overlay" id="modal-delivery">
+    <div class="modal-dialog" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 id="modal-delivery-title">🚚 Cập Nhật Giao Hàng &amp; Vận Chuyển</h3>
+        <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="delivery-order-id">
+        <div style="background:var(--bg-elevated); padding:12px; border-radius:var(--radius-md); margin-bottom:14px; font-size:13px; line-height:1.6;">
+          <div style="display:flex; justify-content:space-between;">
+            <span>Mã đơn: <strong id="delivery-info-code" style="color:var(--primary-light);">...</strong></span>
+            <span>Khách hàng: <strong id="delivery-info-customer">...</strong></span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:4px;">
+            <span>Còn thu COD: <strong id="delivery-info-remaining" style="color:var(--accent-rose);">0 đ</strong></span>
+            <span>Tổng giá trị đơn: <strong id="delivery-info-total">0 đ</strong></span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Trạng Thái Đơn Hàng / Vận Chuyển *</label>
+            <select id="delivery-form-status" class="form-control">
+              <option value="PRODUCED">Xưởng Đã Xong (Chờ giao)</option>
+              <option value="DELIVERING" selected>🚚 Đang Giao Hàng</option>
+              <option value="DELIVERED">📦 Đã Giao Thành Công</option>
+              <option value="COMPLETED">✅ Hoàn Thành Đơn</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phí Giao Hàng (VNĐ)</label>
+            <input type="number" id="delivery-form-fee" class="form-control" min="0" step="1000" placeholder="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Hình Thức / Đơn Vị Giao Hàng</label>
+            <select id="delivery-form-method" class="form-control">
+              <option value="Khách tự lấy">Khách tự lấy tại xưởng</option>
+              <option value="Ahamove" selected>Ahamove (Giao hỏa tốc)</option>
+              <option value="Grab">Grab Express</option>
+              <option value="Viettel Post">Viettel Post</option>
+              <option value="Giao Hàng Tiết Kiệm">Giao Hàng Tiết Kiệm (GHTK)</option>
+              <option value="Nhân viên giao">Nhân viên Tia Chớp giao</option>
+              <option value="Xe ôm / Chành xe">Chành xe / Xe ôm</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mã Vận Đơn / BKS Xe</label>
+            <input type="text" id="delivery-form-tracking" class="form-control" placeholder="Mã tracking hoặc BKS">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Người Nhận Hàng</label>
+            <input type="text" id="delivery-form-recipient-name" class="form-control" placeholder="Họ tên người nhận">
+          </div>
+          <div class="form-group">
+            <label class="form-label">SĐT Người Nhận</label>
+            <input type="text" id="delivery-form-recipient-phone" class="form-control" placeholder="Số điện thoại nhận hàng">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Địa Chỉ Giao Hàng Chi Tiết</label>
+          <input type="text" id="delivery-form-address" class="form-control" placeholder="Số nhà, tên đường, phường/xã...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Ghi Chú Giao Hàng / Dặn Dò Shipper</label>
+          <textarea id="delivery-form-notes" class="form-control" rows="2" placeholder="Thu COD bao nhiêu tiền, gọi trước khi giao, hàng dễ gãy móp..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="App.closeModals()">Đóng</button>
+        <button type="button" class="btn btn-secondary" onclick="App.printDeliveryNote(document.getElementById('delivery-order-id').value)">🖨️ In Phiếu Giao Hàng</button>
+        <button type="button" class="btn btn-primary" onclick="App.saveDeliveryInfo()">💾 Lưu Thông Tin Giao Hàng</button>
       </div>
     </div>
   </div>

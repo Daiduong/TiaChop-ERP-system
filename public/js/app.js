@@ -516,7 +516,12 @@ const App = {
 
     card.querySelectorAll('input, select').forEach(el => {
       if (el.id === 'calc-preset') return;
-      el.addEventListener(el.type === 'number' || el.type === 'range' ? 'input' : 'change', trigger);
+      el.addEventListener(el.type === 'number' || el.type === 'range' ? 'input' : 'change', () => {
+        if (el.id === 'calc-doc-size' || el.id === 'calc-doc-ruot-print') {
+          this.updateDocRuotPriceTag();
+        }
+        trigger();
+      });
     });
 
     document.getElementById('calc-margin-slider').addEventListener('input', (e) => {
@@ -524,6 +529,29 @@ const App = {
     });
 
     this.setPricingGroup(this.state.pricingGroup);
+    this.updateDocRuotPriceTag();
+  },
+
+  // Cập nhật tag đơn giá in ruột hiển thị trực quan ngay trên form nhập liệu
+  updateDocRuotPriceTag() {
+    const tag = document.getElementById('doc-ruot-price-tag');
+    if (!tag) return;
+    const size = (document.getElementById('calc-doc-size')?.value || 'A5').toUpperCase();
+    const ruotPrint = (document.getElementById('calc-doc-ruot-print')?.value || '').toLowerCase();
+    const isColor = ruotPrint.includes('màu');
+    const is2S = ruotPrint.includes('2 mặt');
+    
+    let priceText = '350 đ/tờ';
+    if (!isColor) {
+      if (size === 'A5') priceText = is2S ? '200 đ/tờ' : '225 đ/tờ';
+      else if (size === 'A3') priceText = is2S ? '700 đ/tờ' : '500 đ/tờ';
+      else priceText = is2S ? '350 đ/tờ' : '250 đ/tờ'; // A4
+    } else {
+      if (size === 'A5') priceText = is2S ? '1.500 đ/tờ' : '1.000 đ/tờ';
+      else if (size === 'A3') priceText = is2S ? '5.000 đ/tờ' : '3.500 đ/tờ';
+      else priceText = is2S ? '2.800 đ/tờ' : '1.800 đ/tờ'; // A4
+    }
+    tag.textContent = `${priceText} (${size})`;
   },
 
   // Sản phẩm mẫu theo 3 nhóm (kích thước mm)
@@ -562,6 +590,41 @@ const App = {
       { key: 'CANVAS', name: 'Tranh canvas 0.4 x 0.6 m', w: 400, h: 600, qty: 3, unit: 'tấm', material: 'CANVAS', fin: ['FRAME'] },
       { key: 'SIGN', name: 'Bảng hiệu bạt khung 1.2 x 4 m', w: 4000, h: 1200, qty: 1, unit: 'bảng', material: 'HIFLEX', fin: ['FRAME', 'INSTALL'] },
       { key: 'CUSTOM', name: 'Kích thước tùy chỉnh', custom: true }
+    ],
+    DOCUMENT_SPIRAL: [
+      {
+        key: 'A4_BIA_CUNG_LOXO_KINH',
+        name: 'Tài liệu A4 - Bìa cứng + Lò xo + Đóng kính (80 tờ F80)',
+        w: 210, h: 297, qty: 10, unit: 'cuốn',
+        size: 'A4', pages: 160, ruotPrint: '2 mặt Trắng Đen',
+        bindingPackage: 'HARD_SPIRAL_GLASS',
+        frontPrint: 'In màu 1 mặt', backPrint: 'Không in / Bìa trơn'
+      },
+      {
+        key: 'A4_BIA_CUNG_LOXO',
+        name: 'Tài liệu A4 - Bìa cứng + Đóng lò xo (80 tờ F80)',
+        w: 210, h: 297, qty: 10, unit: 'cuốn',
+        size: 'A4', pages: 160, ruotPrint: '2 mặt Trắng Đen',
+        bindingPackage: 'HARD_SPIRAL',
+        frontPrint: 'In màu 1 mặt', backPrint: 'Không in / Bìa trơn'
+      },
+      {
+        key: 'A5_BIA_CUNG_LOXO',
+        name: 'Tài liệu A5 - Bìa cứng + Đóng lò xo (80 tờ F80)',
+        w: 148, h: 210, qty: 10, unit: 'cuốn',
+        size: 'A5', pages: 160, ruotPrint: '2 mặt Trắng Đen',
+        bindingPackage: 'HARD_SPIRAL',
+        frontPrint: 'In màu 1 mặt', backPrint: 'Không in / Bìa trơn'
+      },
+      {
+        key: 'KN_GIAO_TIEP_FEDEX',
+        name: 'KN GIAO TIEP HIEU QUA_ FEDEX_FINAL (A5)',
+        w: 148, h: 210, qty: 27, unit: 'cuốn',
+        size: 'A5', pages: 67, ruotPrint: '1 mặt Trắng Đen',
+        bindingPackage: 'HARD_SPIRAL',
+        frontPrint: 'In màu 1 mặt', backPrint: 'In thêm bìa sau'
+      },
+      { key: 'CUSTOM', name: 'Tùy chỉnh tài liệu đóng cuốn', custom: true }
     ]
   },
 
@@ -570,8 +633,15 @@ const App = {
     document.querySelectorAll('[data-pricing-group]').forEach(b => b.classList.toggle('active', b.dataset.pricingGroup === group));
     document.querySelectorAll('.pricing-group-fields').forEach(el => { el.style.display = el.dataset.group === group ? '' : 'none'; });
     document.getElementById('fg-pcs-per-unit').style.display = group === 'DIGITAL' ? '' : 'none';
-    const supplierDefault = { DIGITAL: 'ncc_ngocminh', OFFSET: 'ncc_thanhdanh', LARGE_FORMAT: 'ncc_sackim' };
-    document.getElementById('calc-supplier').value = supplierDefault[group];
+    const isDoc = (group === 'DOCUMENT_SPIRAL');
+    const widthEl = document.getElementById('calc-width');
+    if (widthEl) {
+      const dimRow = widthEl.closest('.form-row');
+      if (dimRow) dimRow.style.display = isDoc ? 'none' : '';
+    }
+    const supplierDefault = { DIGITAL: 'ncc_ngocminh', OFFSET: 'ncc_thanhdanh', LARGE_FORMAT: 'ncc_sackim', DOCUMENT_SPIRAL: 'ncc_ttl' };
+    const supEl = document.getElementById('calc-supplier');
+    if (supEl) supEl.value = supplierDefault[group] || 'ncc_ngocminh';
 
     const presets = this.pricingPresets[group];
     document.getElementById('calc-preset').innerHTML = presets.map(p => `<option value="${p.key}">${p.name}</option>`).join('');
@@ -601,6 +671,14 @@ const App = {
       set('calc-off-gsm', p.gsm || 150); set('calc-off-paper', p.paperType || 'COUCHE');
       set('calc-off-cf', p.cf ?? 4); set('calc-off-cb', p.cb ?? 4); set('calc-off-lam', p.lam || 'NONE');
       const wt = document.getElementById('calc-off-wt'); if (wt) wt.checked = false;
+    } else if (this.state.pricingGroup === 'DOCUMENT_SPIRAL') {
+      set('calc-doc-size', p.size || 'A5');
+      set('calc-doc-pages', p.pages || 67);
+      set('calc-doc-ruot-print', p.ruotPrint || '2 mặt Trắng Đen');
+      set('calc-doc-binding-package', p.bindingPackage || 'HARD_SPIRAL');
+      set('calc-doc-front-print', p.frontPrint || 'In màu 1 mặt');
+      set('calc-doc-back-print', p.backPrint || 'Không in / Bìa trơn');
+      this.updateDocRuotPriceTag();
     } else {
       set('calc-lf-material', p.material || 'HIFLEX');
     }
@@ -639,6 +717,40 @@ const App = {
       offsetProduct: preset && preset.table ? preset.table : null, offsetVariant: v('calc-off-variant')
     });
     if (g === 'LARGE_FORMAT') input.material = v('calc-lf-material');
+    if (g === 'DOCUMENT_SPIRAL') {
+      const docSize = v('calc-doc-size') || 'A5';
+      const sizeDims = { A5: { w: 148, h: 210 }, A4: { w: 210, h: 297 }, A3: { w: 297, h: 420 } };
+      input.width = sizeDims[docSize]?.w || 148;
+      input.height = sizeDims[docSize]?.h || 210;
+      input.size = docSize;
+      input.kho_thanh_pham = docSize;
+      input.unit = 'cuốn';
+      
+      const pkg = v('calc-doc-binding-package') || 'HARD_SPIRAL';
+      const isHard = pkg.startsWith('HARD');
+      const hasGlass = pkg.endsWith('GLASS');
+
+      input.hasGlass = hasGlass;
+      input.ruot = {
+        pages: parseInt(v('calc-doc-pages')) || 1,
+        so_trang: parseInt(v('calc-doc-pages')) || 1,
+        printMode: v('calc-doc-ruot-print'),
+        che_do_in: v('calc-doc-ruot-print'),
+        paper: 'F80'
+      };
+      input.front = {
+        paper: isHard ? 'Bìa cứng' : 'Bìa mềm',
+        loai_giay: isHard ? 'Bìa cứng' : 'Bìa mềm',
+        printMode: v('calc-doc-front-print'),
+        che_do_in: v('calc-doc-front-print')
+      };
+      input.back = {
+        paper: 'Couche / Ivory',
+        loai_giay: 'Couche / Ivory',
+        printMode: v('calc-doc-back-print'),
+        che_do_in: v('calc-doc-back-print')
+      };
+    }
     return input;
   },
 
@@ -731,6 +843,27 @@ const App = {
         rects.push({ x: c * layout.itemW, y: r * layout.itemH, w: Math.min(layout.itemW, W), h: layout.itemH });
       }
       tag.textContent = `KHỔ CUỘN ${layout.roll} MM${layout.rowsNeeded > rowsShown ? ` (hiển thị ${rowsShown}/${layout.rowsNeeded} hàng)` : ''}`;
+    } else if (group === 'DOCUMENT_SPIRAL') {
+      W = layout.sheetW; H = layout.sheetH;
+      tag.textContent = `TÀI LIỆU KHỔ ${document.getElementById('calc-doc-size')?.value || 'A5'} — ĐÓNG LÒ XO XOẮN`;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      // Vẽ mô phỏng cuốn sách với gáy lò xo bên trái
+      const wireCount = 12;
+      const wirePitch = (H - 20) / wireCount;
+      let wiresSvg = '';
+      for (let i = 0; i < wireCount; i++) {
+        const wy = 10 + i * wirePitch + wirePitch / 2;
+        wiresSvg += `<ellipse cx="14" cy="${wy}" rx="5" ry="3.5" fill="none" stroke="#f59e0b" stroke-width="2.5"/>`;
+      }
+      svg.innerHTML = `
+        <rect x="12" y="8" width="${W - 18}" height="${H - 16}" rx="3" fill="#ffffff" fill-opacity="0.12" stroke="#6366f1" stroke-width="2"/>
+        <rect x="18" y="14" width="${W - 30}" height="${H - 28}" rx="2" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="26" y1="8" x2="26" y2="${H - 8}" stroke="#475569" stroke-width="1.5"/>
+        <text x="${W / 2 + 5}" y="${H / 2 - 8}" font-size="${Math.round(W / 11)}" fill="#e2e8f0" text-anchor="middle" font-weight="600">RUỘT ${document.getElementById('calc-doc-pages')?.value || 67} TRANG</text>
+        <text x="${W / 2 + 5}" y="${H / 2 + 16}" font-size="${Math.round(W / 14)}" fill="#94a3b8" text-anchor="middle">${document.getElementById('calc-doc-size')?.value || 'A5'} • LÒ XO XOẮN</text>
+        ${wiresSvg}
+      `;
+      return;
     } else {
       W = layout.sheetW; H = layout.sheetH;
       const iw = layout.rotated ? layout.itemH : layout.itemW;
@@ -780,6 +913,7 @@ const App = {
     let paper = '';
     if (input.group === 'DIGITAL') paper = input.paper;
     else if (input.group === 'OFFSET') paper = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
+    else if (input.group === 'DOCUMENT_SPIRAL') paper = `Bìa: ${input.front?.paper || 'Ivory'} / Ruột: Fort 80gsm`;
     else paper = input.material;
 
     // Quy cách gửi khách hàng: loại bỏ thông tin kỹ thuật xưởng
@@ -829,6 +963,7 @@ const App = {
     let paperText = '';
     if (input.group === 'DIGITAL') paperText = `Giấy ${input.paper || 'C150'}`;
     else if (input.group === 'OFFSET') paperText = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
+    else if (input.group === 'DOCUMENT_SPIRAL') paperText = `Bìa trước: ${input.front?.paper || 'Ivory 300gsm'} • Bìa sau: ${input.back?.paper || 'Couche/Ivory'} • Ruột: ${input.ruot?.pages || 67} trang (${input.ruot?.printMode || '1 mặt Trắng Đen'})`;
     else paperText = input.material || 'Bạt / Decal';
 
     let lamText = 'Không cán';
@@ -995,6 +1130,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             </td>
             <td style="font-weight:700; color:var(--primary-light);">
               ${this.formatCurrency(o.total_selling)}
+              ${o.shipping_fee > 0 ? `<div style="font-size:10px; color:var(--primary-light);">🚚 Ship: +${this.formatCurrency(o.shipping_fee)}</div>` : ''}
               ${o.vat_rate > 0 ? `<div style="font-size:10px; color:var(--text-dim);">Gồm VAT ${o.vat_rate}%</div>` : ''}
             </td>
             <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} color:var(--accent-amber); font-weight:600;">
@@ -1016,9 +1152,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>Đã Chốt Đơn</option>
                 <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>Đang In Xưởng</option>
                 <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>Xưởng Đã Xong</option>
-                <option value="DELIVERING" ${o.status === 'DELIVERING' ? 'selected' : ''}>Đang Giao Hàng</option>
+                <option value="DELIVERING" ${o.status === 'DELIVERING' ? 'selected' : ''}>🚚 Đang Giao</option>
+                <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>📦 Đã Giao</option>
                 <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>Hoàn Thành</option>
               </select>
+              ${o.shipping_method ? `
+                <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">
+                  🚚 ${o.shipping_method}${o.tracking_code ? ` - ${o.tracking_code}` : ''}
+                </div>
+              ` : ''}
             </td>
             <td>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -1028,8 +1170,10 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 ${!['COMPLETED', 'CANCELLED'].includes(o.status) ? `
                   <button class="btn btn-secondary btn-sm" onclick="App.editOrder('${o.id}')" title="Sửa thông tin đơn hàng" style="color:var(--accent-amber);">✏️ Sửa</button>
                 ` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="App.openDeliveryModal('${o.id}')" title="Cập nhật giao hàng & phí ship" style="color:var(--primary-light);">🚚 Giao</button>
                 <button class="btn btn-secondary btn-sm" onclick="App.openPaymentModal('${o.id}', '${o.code}', '${safeCustomerName}', ${o.remaining_amount || 0})" title="Thu cọc / Thanh toán">💳 Thu</button>
-                <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Báo Giá / Đơn Hàng PDF">🖨️ In Phiếu</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Báo Giá / Đơn Hàng PDF">🖨️ Phiếu Bán</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.printDeliveryNote('${o.id}')" title="In Phiếu Giao Hàng Cho Tài Xế / Khách">📦 Phiếu Giao</button>
                 ${!isSales ? `<button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${o.id}')" title="In Phiếu Lệnh In Gửi Xưởng">🏭 Lệnh Xưởng</button>` : ''}
               </div>
             </td>
@@ -1098,6 +1242,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     document.getElementById('order-form').reset();
     document.getElementById('form-order-discount').value = 0;
     document.getElementById('form-order-vat-rate').value = 8;
+    document.getElementById('form-order-shipping-fee').value = 0;
+    document.getElementById('form-order-shipping-method').value = 'Ahamove';
+    document.getElementById('form-order-tracking-code').value = '';
+    document.getElementById('form-order-recipient-name').value = '';
+    document.getElementById('form-order-recipient-phone').value = '';
     document.getElementById('form-order-deposit').value = 0;
     const now = new Date();
     document.getElementById('form-order-deadline').value =
@@ -1162,6 +1311,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('form-order-contact').value = o.contact_id || '';
       document.getElementById('form-order-deadline').value = o.delivery_deadline ? o.delivery_deadline.substring(0, 10) : '';
       document.getElementById('form-order-address').value = o.shipping_address || '';
+      document.getElementById('form-order-shipping-fee').value = o.shipping_fee || 0;
+      document.getElementById('form-order-shipping-method').value = o.shipping_method || 'Ahamove';
+      document.getElementById('form-order-tracking-code').value = o.tracking_code || '';
+      document.getElementById('form-order-recipient-name').value = o.recipient_name || '';
+      document.getElementById('form-order-recipient-phone').value = o.recipient_phone || '';
       document.getElementById('form-order-discount').value = o.discount_amount || 0;
       document.getElementById('form-order-vat-rate').value = o.vat_rate ?? 0;
       // Ô deposit ẩn khi edit (không tạo giao dịch mới tự động)
@@ -1395,14 +1549,17 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
     const discountAmount = parseFloat(document.getElementById('form-order-discount').value) || 0;
     const vatRate = parseFloat(document.getElementById('form-order-vat-rate').value) || 0;
+    const shippingFee = parseFloat(document.getElementById('form-order-shipping-fee')?.value) || 0;
 
     const afterDiscount = Math.max(0, subtotal - discountAmount);
     const vatAmount = (afterDiscount * vatRate) / 100;
-    const grandTotal = afterDiscount + vatAmount;
+    const grandTotal = afterDiscount + vatAmount + Math.max(0, shippingFee);
     const grossProfit = afterDiscount - totalCost;
 
     document.getElementById('order-calc-subtotal').textContent = this.formatCurrency(subtotal);
     document.getElementById('order-calc-vat').textContent = this.formatCurrency(vatAmount);
+    const shippingFeeEl = document.getElementById('order-calc-shipping-fee');
+    if (shippingFeeEl) shippingFeeEl.textContent = this.formatCurrency(shippingFee);
     document.getElementById('order-calc-grand-total').textContent = this.formatCurrency(grandTotal);
     document.getElementById('order-calc-total-cost').textContent = this.formatCurrency(totalCost);
     document.getElementById('order-calc-gross-profit').textContent = this.formatCurrency(grossProfit);
@@ -1419,6 +1576,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const contactId = document.getElementById('form-order-contact').value;
     const deadline = document.getElementById('form-order-deadline').value;
     const address = document.getElementById('form-order-address').value;
+    const shippingFee = parseFloat(document.getElementById('form-order-shipping-fee')?.value) || 0;
+    const shippingMethod = document.getElementById('form-order-shipping-method')?.value || '';
+    const trackingCode = document.getElementById('form-order-tracking-code')?.value || '';
+    const recipientName = document.getElementById('form-order-recipient-name')?.value || '';
+    const recipientPhone = document.getElementById('form-order-recipient-phone')?.value || '';
     const discount = parseFloat(document.getElementById('form-order-discount').value) || 0;
     const vatRate = parseFloat(document.getElementById('form-order-vat-rate').value) || 0;
     const deposit = parseFloat(document.getElementById('form-order-deposit').value) || 0;
@@ -1464,6 +1626,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         contact_id: contactId,
         delivery_deadline: deadline,
         shipping_address: address,
+        shipping_fee: shippingFee,
+        shipping_method: shippingMethod,
+        tracking_code: trackingCode,
+        recipient_name: recipientName,
+        recipient_phone: recipientPhone,
         discount_amount: discount,
         vat_rate: vatRate,
         notes,
@@ -1551,6 +1718,83 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       }
     } catch (err) {
       alert('Lỗi thu tiền: ' + err.message);
+    }
+  },
+
+  // ==========================================
+  // DELIVERY MANAGEMENT MODAL & LOGIC
+  // ==========================================
+  async openDeliveryModal(orderId) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}`);
+      const o = await res.json();
+      if (!o || !o.id) {
+        alert('Không tìm thấy thông tin đơn hàng!');
+        return;
+      }
+
+      document.getElementById('delivery-order-id').value = o.id;
+      document.getElementById('delivery-info-code').textContent = o.code;
+      document.getElementById('delivery-info-customer').textContent = `${o.customer_name} (${o.customer_phone || ''})`;
+      document.getElementById('delivery-info-remaining').textContent = this.formatCurrency(o.remaining_amount || 0);
+      document.getElementById('delivery-info-total').textContent = this.formatCurrency(o.total_selling || 0);
+
+      document.getElementById('delivery-form-status').value = ['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(o.status) ? o.status : 'DELIVERING';
+      document.getElementById('delivery-form-fee').value = o.shipping_fee || 0;
+      document.getElementById('delivery-form-method').value = o.shipping_method || 'Ahamove';
+      document.getElementById('delivery-form-tracking').value = o.tracking_code || '';
+      document.getElementById('delivery-form-recipient-name').value = o.recipient_name || o.contact_name || o.customer_name || '';
+      document.getElementById('delivery-form-recipient-phone').value = o.recipient_phone || o.contact_phone || o.customer_phone || '';
+      document.getElementById('delivery-form-address').value = o.shipping_address || o.customer_full_address || '';
+      document.getElementById('delivery-form-notes').value = o.delivery_notes || '';
+
+      document.getElementById('modal-delivery').classList.add('active');
+    } catch (err) {
+      alert('Lỗi khi mở giao diện giao hàng: ' + err.message);
+    }
+  },
+
+  async saveDeliveryInfo() {
+    const orderId = document.getElementById('delivery-order-id').value;
+    if (!orderId) return;
+
+    const status = document.getElementById('delivery-form-status').value;
+    const shipping_fee = parseFloat(document.getElementById('delivery-form-fee').value) || 0;
+    const shipping_method = document.getElementById('delivery-form-method').value;
+    const tracking_code = document.getElementById('delivery-form-tracking').value.trim();
+    const recipient_name = document.getElementById('delivery-form-recipient-name').value.trim();
+    const recipient_phone = document.getElementById('delivery-form-recipient-phone').value.trim();
+    const shipping_address = document.getElementById('delivery-form-address').value.trim();
+    const delivery_notes = document.getElementById('delivery-form-notes').value.trim();
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/delivery`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          shipping_fee,
+          shipping_method,
+          tracking_code,
+          recipient_name,
+          recipient_phone,
+          shipping_address,
+          delivery_notes
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Lỗi cập nhật giao hàng: ' + (data.error || 'Có lỗi xảy ra'));
+        return;
+      }
+
+      alert('Đã cập nhật thông tin vận chuyển thành công!');
+      this.closeModals();
+      this.loadOrders();
+      this.loadDashboard();
+    } catch (err) {
+      alert('Lỗi kết nối máy chủ: ' + err.message);
     }
   },
 
@@ -2011,6 +2255,121 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     window.print();
   },
 
+  async printDeliveryNote(orderId) {
+    try {
+      let order = this.state.orders.find(o => o.id === orderId);
+      if (!order || !order.items || order.items.length === 0) {
+        const res = await fetch(`/api/orders/${orderId}`);
+        order = await res.json();
+      }
+      if (!order || !order.id) {
+        alert('Không tìm thấy thông tin đơn hàng để in phiếu giao hàng!');
+        return;
+      }
+
+      const S = (window.Admin && Admin.settings) || {};
+      const C = S.primary_color || '#0284c7';
+      const printable = document.getElementById('printable-area');
+
+      const recipientName = order.recipient_name || order.contact_name || order.customer_name || 'Khách hàng';
+      const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
+      const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
+      const shippingMethod = order.shipping_method || 'Giao hàng';
+      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
+
+      printable.innerHTML = `
+        <div class="print-header" style="border-bottom-color:${C};">
+          <div class="print-logo-box">
+            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
+            <div>
+              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
+              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
+              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
+              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
+            </div>
+          </div>
+          <div class="print-company-info">
+            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
+            <div>Mã Đơn: <strong>${order.code}</strong></div>
+            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
+            <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
+          <div>
+            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
+            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
+            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
+          </div>
+          <div>
+            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
+            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
+            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
+          </div>
+        </div>
+
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width:35px; text-align:center;">STT</th>
+              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
+              <th style="width:90px; text-align:center;">Số Lượng</th>
+              <th style="width:70px; text-align:center;">ĐVT</th>
+              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(order.items || []).map((it, idx) => `
+              <tr>
+                <td style="text-align:center;">${idx + 1}</td>
+                <td>
+                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
+                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
+                </td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
+                <td style="text-align:center;">${it.unit || 'bộ'}</td>
+                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
+          <div style="font-size:9.5pt; color:#9a3412;">
+            <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
+            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
+          </div>
+          <div style="text-align:right; font-size:10pt;">
+            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
+              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
+            </div>
+          </div>
+        </div>
+
+        <div class="print-signatures" style="margin-top:24px;">
+          <div class="sig-col">
+            <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI NHẬN HÀNG</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
+          </div>
+        </div>
+      `;
+
+      window.print();
+    } catch (err) {
+      alert('Lỗi in phiếu giao hàng: ' + err.message);
+    }
+  },
+
   async sendJobToSupplier(itemId) {
     if (!confirm('Xác nhận GỬI XƯỞNG cho lệnh in này? (Trạng thái sẽ chuyển sang Đang in xưởng)')) return;
     try {
@@ -2304,6 +2663,12 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               <td style="text-align:right;">${this.formatNumber(order.vat_amount)}</td>
             </tr>
           ` : ''}
+          ${order.shipping_fee > 0 ? `
+            <tr>
+              <td colspan="5" style="text-align:right;">Phí vận chuyển (${order.shipping_method || 'Giao hàng'}):</td>
+              <td style="text-align:right;">${this.formatNumber(order.shipping_fee)}</td>
+            </tr>
+          ` : ''}
           <tr>
             <td colspan="5" style="text-align:right; font-weight:bold; font-size:11pt;">TỔNG CỘNG:</td>
             <td style="text-align:right; font-weight:bold; font-size:11pt; color:#0284c7;">${this.formatNumber(order.total_selling)} đ</td>
@@ -2340,6 +2705,121 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     `;
 
     window.print();
+  },
+
+  async printDeliveryNote(orderId) {
+    try {
+      let order = this.state.orders.find(o => o.id === orderId);
+      if (!order || !order.items || order.items.length === 0) {
+        const res = await fetch(`/api/orders/${orderId}`);
+        order = await res.json();
+      }
+      if (!order || !order.id) {
+        alert('Không tìm thấy thông tin đơn hàng để in phiếu giao hàng!');
+        return;
+      }
+
+      const S = (window.Admin && Admin.settings) || {};
+      const C = S.primary_color || '#0284c7';
+      const printable = document.getElementById('printable-area');
+
+      const recipientName = order.recipient_name || order.contact_name || order.customer_name || 'Khách hàng';
+      const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
+      const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
+      const shippingMethod = order.shipping_method || 'Giao hàng';
+      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
+
+      printable.innerHTML = `
+        <div class="print-header" style="border-bottom-color:${C};">
+          <div class="print-logo-box">
+            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
+            <div>
+              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
+              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
+              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
+              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
+            </div>
+          </div>
+          <div class="print-company-info">
+            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
+            <div>Mã Đơn: <strong>${order.code}</strong></div>
+            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
+            <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
+          <div>
+            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
+            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
+            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
+          </div>
+          <div>
+            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
+            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
+            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
+          </div>
+        </div>
+
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width:35px; text-align:center;">STT</th>
+              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
+              <th style="width:90px; text-align:center;">Số Lượng</th>
+              <th style="width:70px; text-align:center;">ĐVT</th>
+              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(order.items || []).map((it, idx) => `
+              <tr>
+                <td style="text-align:center;">${idx + 1}</td>
+                <td>
+                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
+                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
+                </td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
+                <td style="text-align:center;">${it.unit || 'bộ'}</td>
+                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
+          <div style="font-size:9.5pt; color:#9a3412;">
+            <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
+            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
+          </div>
+          <div style="text-align:right; font-size:10pt;">
+            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
+              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
+            </div>
+          </div>
+        </div>
+
+        <div class="print-signatures" style="margin-top:24px;">
+          <div class="sig-col">
+            <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI NHẬN HÀNG</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
+          </div>
+        </div>
+      `;
+
+      window.print();
+    } catch (err) {
+      alert('Lỗi in phiếu giao hàng: ' + err.message);
+    }
   },
 
   printJobTicket(orderId) {
@@ -2412,6 +2892,121 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     `;
 
     window.print();
+  },
+
+  async printDeliveryNote(orderId) {
+    try {
+      let order = this.state.orders.find(o => o.id === orderId);
+      if (!order || !order.items || order.items.length === 0) {
+        const res = await fetch(`/api/orders/${orderId}`);
+        order = await res.json();
+      }
+      if (!order || !order.id) {
+        alert('Không tìm thấy thông tin đơn hàng để in phiếu giao hàng!');
+        return;
+      }
+
+      const S = (window.Admin && Admin.settings) || {};
+      const C = S.primary_color || '#0284c7';
+      const printable = document.getElementById('printable-area');
+
+      const recipientName = order.recipient_name || order.contact_name || order.customer_name || 'Khách hàng';
+      const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
+      const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
+      const shippingMethod = order.shipping_method || 'Giao hàng';
+      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
+
+      printable.innerHTML = `
+        <div class="print-header" style="border-bottom-color:${C};">
+          <div class="print-logo-box">
+            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
+            <div>
+              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
+              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
+              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
+              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
+            </div>
+          </div>
+          <div class="print-company-info">
+            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
+            <div>Mã Đơn: <strong>${order.code}</strong></div>
+            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
+            <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
+          <div>
+            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
+            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
+            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
+          </div>
+          <div>
+            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
+            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
+            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
+          </div>
+        </div>
+
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width:35px; text-align:center;">STT</th>
+              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
+              <th style="width:90px; text-align:center;">Số Lượng</th>
+              <th style="width:70px; text-align:center;">ĐVT</th>
+              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(order.items || []).map((it, idx) => `
+              <tr>
+                <td style="text-align:center;">${idx + 1}</td>
+                <td>
+                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
+                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
+                </td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
+                <td style="text-align:center;">${it.unit || 'bộ'}</td>
+                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
+          <div style="font-size:9.5pt; color:#9a3412;">
+            <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
+            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
+          </div>
+          <div style="text-align:right; font-size:10pt;">
+            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
+              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
+            </div>
+          </div>
+        </div>
+
+        <div class="print-signatures" style="margin-top:24px;">
+          <div class="sig-col">
+            <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
+          </div>
+          <div class="sig-col">
+            <strong>NGƯỜI NHẬN HÀNG</strong>
+            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
+          </div>
+        </div>
+      `;
+
+      window.print();
+    } catch (err) {
+      alert('Lỗi in phiếu giao hàng: ' + err.message);
+    }
   },
 
   // ==========================================

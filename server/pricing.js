@@ -498,18 +498,209 @@ function calcLargeFormat(input, P) {
 
 function fmt(n) { return `${Math.round(n).toLocaleString('vi-VN')}đ`; }
 
-const GROUP_LABEL = { DIGITAL: 'In nhanh kỹ thuật số', OFFSET: 'In offset', LARGE_FORMAT: 'In quảng cáo' };
+// ==========================================================
+// NHÓM 4 — IN TÀI LIỆU & ĐÓNG LÒ XO XOẮN (DOCUMENT & SPIRAL BINDING ENGINE)
+// BẢNG GIÁ NHÀ CUNG CẤP:
+// - BÌA CỨNG + ĐÓNG LOXO + ĐÓNG KÍNH (A4): 20.000đ
+// - BÌA CỨNG + ĐÓNG LOXO (A4): 16.000đ
+// - BÌA CỨNG + ĐÓNG LOXO (A5): 12.000đ
+// - BÌA MỀM + ĐÓNG LOXO (A4): 10.000đ (có kính: 14.000đ)
+// - BÌA MỀM + ĐÓNG LOXO (A5): 8.500đ (có kính: 11.500đ)
+// * Tất cả giá lò xo trên tầm 80-100 tờ trở lại. Nếu trên 100 tờ (ruột dày): +3.000đ tiền lò xo cỡ lớn.
+// * In thêm bìa mặt sau: +2.000đ (bìa trước mặc định đã gồm in trong gói bìa cứng).
+// * Giá in trắng đen giấy F80 (ruột):
+//   + A4 2 mặt: 350đ/tờ (in 1 mặt: 250đ/tờ)
+//   + A5 2 mặt: 200đ/tờ (in 1 mặt: 225đ/tờ)
+//   + A3 2 mặt: 700đ/tờ (in 1 mặt: 500đ/tờ)
+// ==========================================================
+
+function calcDocumentSpiral(input, P) {
+  const qty = Math.max(1, parseInt(input.quantity || input.so_luong_cuon) || 1);
+  const size = (input.size || input.kho_thanh_pham || 'A5').toUpperCase(); // A5, A4, A3
+
+  // 1. Quy cách ruột
+  const ruot = input.ruot || input.quy_cach_ruot || {};
+  const pages = Math.max(1, parseInt(ruot.pages || ruot.so_trang) || 1);
+  const ruotPrint = (ruot.printMode || ruot.che_do_in || '2 mặt Trắng Đen').toLowerCase();
+  const isColorRuot = ruotPrint.includes('màu');
+  const ruotSides = (ruotPrint.includes('2 mặt') || ruotPrint.includes('hai mặt')) ? 2 : 1;
+  const paperGsm = ruot.paper || 'F80';
+
+  // Số tờ giấy ruột = số trang / số mặt (làm tròn lên)
+  const sheetsPerBook = ruotSides === 2 ? Math.ceil(pages / 2) : pages;
+
+  // Đơn giá ruột theo bảng giá NCC:
+  // A4 F80 2 mặt = 350đ/tờ, 1 mặt = 250đ/tờ
+  // A5 F80 2 mặt = 200đ/tờ, 1 mặt = 225đ/tờ
+  let sheetPrice;
+  if (!isColorRuot) {
+    if (size === 'A5') {
+      sheetPrice = ruotSides === 2 
+        ? P('DOC_RUOT_A5_BW_2S', 200) 
+        : P('DOC_RUOT_A5_BW_1S', 225);
+    } else if (size === 'A3') {
+      sheetPrice = ruotSides === 2 ? 700 : 500;
+    } else { // Mặc định A4
+      sheetPrice = ruotSides === 2 
+        ? P('DOC_RUOT_A4_BW_2S', 350) 
+        : P('DOC_RUOT_A4_BW_1S', 250);
+    }
+  } else {
+    // Ruột in màu KTS
+    if (size === 'A5') sheetPrice = ruotSides === 2 ? 1500 : 1000;
+    else if (size === 'A3') sheetPrice = ruotSides === 2 ? 5000 : 3500;
+    else sheetPrice = ruotSides === 2 ? 2800 : 1800; // A4
+  }
+
+  const ruotCostPerBook = sheetsPerBook * sheetPrice;
+  const totalRuotCost = ruotCostPerBook * qty;
+
+  // 2. Quy cách Bìa & Đóng Lò Xo theo bảng giá nhà cung cấp
+  const front = input.front || input.quy_cach_bia_truoc || {};
+  const frontPaper = (front.paper || front.loai_giay || 'Bìa cứng').toLowerCase();
+  const isHardCover = frontPaper.includes('cứng') || frontPaper.includes('bồi') || frontPaper.includes('carton') || frontPaper.includes('ivory 300') || frontPaper.includes('300gsm');
+
+  // Đóng mica / kính trong
+  const hasGlass = input.hasGlass ?? (
+    input.finishing?.includes('GLASS') ||
+    input.quy_cach_dong_cuon?.includes('kính') ||
+    input.quy_cach_dong_cuon?.includes('mica') ||
+    (input.binding && input.binding.includes('GLASS'))
+  );
+
+  // Phụ thu lò xo nếu ruột dày trên 100 tờ: +3.000đ (hoặc cấu hình DOC_SPIRAL_SURCHARGE_THICK)
+  const isThick = sheetsPerBook > 100;
+  const thickSpiralSurcharge = isThick ? P('DOC_SPIRAL_SURCHARGE_THICK', 3000) : 0;
+
+  // Giá combo [Bìa + Đóng lò xo + Kính] theo khổ A4 / A5
+  let baseCoverBindingCost = 0;
+  let coverBindingLabel = '';
+
+  if (size === 'A4') {
+    if (isHardCover) {
+      if (hasGlass) {
+        baseCoverBindingCost = P('DOC_A4_HARD_SPIRAL_GLASS', 20000); // BÌA CỨNG + ĐÓNG LOXO + ĐÓNG KÍNH (A4): 20.000đ
+        coverBindingLabel = 'Bìa cứng + Đóng lò xo + Đóng kính A4';
+      } else {
+        baseCoverBindingCost = P('DOC_A4_HARD_SPIRAL', 16000); // BÌA CỨNG + ĐÓNG LOXO (A4): 16.000đ
+        coverBindingLabel = 'Bìa cứng + Đóng lò xo A4';
+      }
+    } else {
+      // Bìa mềm A4
+      baseCoverBindingCost = hasGlass 
+        ? P('DOC_A4_SOFT_SPIRAL_GLASS', 14000) 
+        : P('DOC_A4_SOFT_SPIRAL', 10000);
+      coverBindingLabel = hasGlass ? 'Bìa mềm + Đóng lò xo + Đóng kính A4' : 'Bìa mềm + Đóng lò xo A4';
+    }
+  } else if (size === 'A3') {
+    baseCoverBindingCost = (isHardCover ? 28000 : 20000) + (hasGlass ? 6000 : 0);
+    coverBindingLabel = `${isHardCover ? 'Bìa cứng' : 'Bìa mềm'} + Đóng lò xo A3${hasGlass ? ' + Kính' : ''}`;
+  } else {
+    // Mặc định A5
+    if (isHardCover) {
+      baseCoverBindingCost = hasGlass 
+        ? 15000 
+        : P('DOC_A5_HARD_SPIRAL', 12000); // BÌA CỨNG + ĐÓNG LOXO (A5): 12.000đ
+      coverBindingLabel = hasGlass ? 'Bìa cứng + Đóng lò xo + Đóng kính A5' : 'Bìa cứng + Đóng lò xo A5';
+    } else {
+      // Bìa mềm A5
+      baseCoverBindingCost = hasGlass 
+        ? P('DOC_A5_SOFT_SPIRAL_GLASS', 11500) 
+        : P('DOC_A5_SOFT_SPIRAL', 8500);
+      coverBindingLabel = hasGlass ? 'Bìa mềm + Đóng lò xo + Đóng kính A5' : 'Bìa mềm + Đóng lò xo A5';
+    }
+  }
+
+  // 3. In thêm bìa mặt sau: +2.000đ (nếu có yêu cầu in bìa sau)
+  const back = input.back || input.quy_cach_bia_sau || {};
+  const backPrint = (back.printMode || back.che_do_in || '').toLowerCase();
+  const hasBackPrint = (backPrint.includes('thêm') || backPrint.includes('màu') || backPrint.includes('đen') || backPrint.includes('trắng')) && !backPrint.includes('không in') && !backPrint.includes('trơn');
+  const backPrintSurcharge = hasBackPrint ? P('DOC_BACK_COVER_PRINT', 2000) : 0; // IN THÊM BÌA MẶT SAU + 2.000Đ
+
+  // Đơn vị thành tiền từng phần cho 1 cuốn
+  const coverBindingCostPerBook = baseCoverBindingCost + thickSpiralSurcharge + backPrintSurcharge;
+  const unitCost = ruotCostPerBook + coverBindingCostPerBook;
+  const totalCost = unitCost * qty;
+
+  const lines = [
+    {
+      group: 'Gia công & Bìa',
+      name: `${coverBindingLabel} (${fmt(baseCoverBindingCost)}/cuốn)`,
+      cost: round(baseCoverBindingCost * qty)
+    }
+  ];
+
+  if (isThick) {
+    lines.push({
+      group: 'Gia công',
+      name: `Phụ thu lò xo ruột dày (${sheetsPerBook} tờ > 100 tờ: +3.000đ/cuốn)`,
+      cost: round(thickSpiralSurcharge * qty)
+    });
+  }
+
+  if (hasBackPrint) {
+    lines.push({
+      group: 'Bìa',
+      name: `In thêm bìa mặt sau (+2.000đ/cuốn)`,
+      cost: round(backPrintSurcharge * qty)
+    });
+  }
+
+  lines.push({
+    group: 'Ruột',
+    name: `Ruột giấy ${paperGsm} ${size} (${pages} trang = ${sheetsPerBook} tờ ${ruotPrint}, ${fmt(sheetPrice)}/tờ)`,
+    cost: round(totalRuotCost)
+  });
+
+  const layout = {
+    type: 'sheet',
+    sheetW: size === 'A5' ? 148 : (size === 'A3' ? 297 : 210),
+    sheetH: size === 'A5' ? 210 : (size === 'A3' ? 420 : 297),
+    cols: 1, rows: 1, ups: 1, margin: 5, gap: 0,
+    itemW: size === 'A5' ? 148 : (size === 'A3' ? 297 : 210),
+    itemH: size === 'A5' ? 210 : (size === 'A3' ? 420 : 297)
+  };
+
+  const ruotSummary = `${pages} trang (${sheetsPerBook} tờ ${ruotPrint}, giấy ${paperGsm})`;
+  const specs = `Tài liệu ${size}, ${coverBindingLabel}${isThick ? ' (lò xo lớn >100 tờ)' : ''}${hasBackPrint ? ' + In bìa sau' : ''}, ruột: ${ruotSummary}`;
+
+  return {
+    lines,
+    layout,
+    finalizeArgs: { minOrder: 0, volumeDiscountPct: 0 },
+    metrics: [
+      ['Khổ thành phẩm', size],
+      ['Số lượng cuốn', `${qty.toLocaleString('vi-VN')} cuốn`],
+      ['Ruột sách', `${pages} trang (${sheetsPerBook} tờ ${paperGsm}, ${ruotPrint})`],
+      ['Giá in ruột', `${fmt(sheetPrice)} / tờ (${fmt(ruotCostPerBook)} / cuốn)`],
+      ['Gói bìa & Lò xo', `${fmt(baseCoverBindingCost)} / cuốn (${coverBindingLabel})`],
+      ['Phụ thu lò xo >100 tờ', isThick ? `+3.000đ / cuốn` : '0đ (dưới 100 tờ)'],
+      ['In bìa mặt sau', hasBackPrint ? `+2.000đ / cuốn` : 'Không in (0đ)'],
+      ['Đơn giá vốn NCC', `${fmt(unitCost)} / cuốn`],
+      ['Đơn vị tính', 'cuốn']
+    ],
+    impositionNote: `Tài liệu đóng lò xo ${size}: ${coverBindingLabel}, ruột ${sheetsPerBook} tờ (${pages} trang ${ruotPrint}), NCC: ${fmt(unitCost)}/cuốn.`,
+    specs
+  };
+}
+
+const GROUP_LABEL = { DIGITAL: 'In nhanh kỹ thuật số', OFFSET: 'In offset', LARGE_FORMAT: 'In quảng cáo', DOCUMENT_SPIRAL: 'Tài liệu & Đóng lò xo' };
 
 function calculatePrice(db, input) {
   const P = buildPriceLookup(db);
   const group = GROUP_LABEL[input.group] ? input.group : 'DIGITAL';
-  const qty = Math.max(1, parseInt(input.quantity) || 1);
-  const r = group === 'OFFSET' ? (OFFSET_PRICE_TABLES[input.offsetProduct] ? calcOffsetTable(input, P) : calcOffset(input, P)) : group === 'LARGE_FORMAT' ? calcLargeFormat(input, P) : calcDigital(input, P);
+  const qty = Math.max(1, parseInt(input.quantity || input.so_luong_cuon) || 1);
+  
+  const r = group === 'DOCUMENT_SPIRAL' 
+    ? calcDocumentSpiral(input, P) 
+    : (group === 'OFFSET' 
+      ? (OFFSET_PRICE_TABLES[input.offsetProduct] ? calcOffsetTable(input, P) : calcOffset(input, P)) 
+      : (group === 'LARGE_FORMAT' ? calcLargeFormat(input, P) : calcDigital(input, P)));
 
   const fin = finalize({
     lines: r.lines,
     quantity: qty,
-    overheadPercent: input.overheadPercent ?? P('OVERHEAD_PCT', 10),
+    overheadPercent: input.overheadPercent ?? (group === 'DOCUMENT_SPIRAL' ? 0 : P('OVERHEAD_PCT', 10)),
     marginPercent: input.marginPercent ?? 40,
     ...r.finalizeArgs
   });
@@ -517,9 +708,9 @@ function calculatePrice(db, input) {
   return {
     group,
     groupLabel: GROUP_LABEL[group],
-    productName: input.productName || GROUP_LABEL[group],
+    productName: input.productName || input.ten_san_pham || GROUP_LABEL[group],
     quantity: qty,
-    baseUnit: input.unit || (group === 'LARGE_FORMAT' ? 'tấm' : 'tờ'),
+    baseUnit: input.unit || (group === 'DOCUMENT_SPIRAL' ? 'cuốn' : (group === 'LARGE_FORMAT' ? 'tấm' : 'tờ')),
     lines: r.lines,
     metrics: r.metrics.map(([label, value]) => ({ label, value })),
     layout: r.layout,
@@ -529,4 +720,4 @@ function calculatePrice(db, input) {
   };
 }
 
-module.exports = { calculatePrice, fitOnSheet, sheetsNeeded, areaM2, inchToMm, DIGITAL_SHEETS, OFFSET_SHEETS, OFFSET_PRICE_TABLES, LF_MATERIALS };
+module.exports = { calculatePrice, fitOnSheet, sheetsNeeded, areaM2, inchToMm, DIGITAL_SHEETS, OFFSET_SHEETS, OFFSET_PRICE_TABLES, LF_MATERIALS, calcDocumentSpiral };
