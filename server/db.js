@@ -155,8 +155,8 @@ function initDatabase() {
 
   ensureOwnerColumns();
 
-  // Seed dữ liệu mẫu nếu chưa có dữ liệu
-  seedInitialData();
+  // Seed dữ liệu mẫu ban đầu (đã tắt khi lên production)
+  // seedInitialData();
   ensurePricingMatrixConfigs();
 }
 

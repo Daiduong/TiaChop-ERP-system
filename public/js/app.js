@@ -78,6 +78,13 @@ const App = {
       document.querySelectorAll('.rbac-admin-coord').forEach(el => {
         el.style.display = ['ADMIN', 'COORDINATOR'].includes(user.role) ? '' : 'none';
       });
+      document.querySelectorAll('.rbac-admin-only').forEach(el => {
+        el.style.display = (user.role === 'ADMIN') ? '' : 'none';
+      });
+      const offVariantLabel = document.getElementById('label-off-variant');
+      if (offVariantLabel) {
+        offVariantLabel.textContent = (user.role === 'ADMIN') ? 'Giấy / Biến thể (bảng giá In Thành Danh)' : 'Giấy / Biến thể sản phẩm';
+      }
     }
     this.bindEvents();
     this.setupShortcuts();
@@ -276,6 +283,15 @@ const App = {
     document.querySelectorAll('.rbac-admin-coord').forEach(el => {
       el.style.display = ['ADMIN', 'COORDINATOR'].includes(role) ? '' : 'none';
     });
+    // Ẩn/hiện các phần chỉ dành riêng cho Admin (thông tin xưởng gia công dự kiến)
+    const isAdmin = (role === 'ADMIN');
+    document.querySelectorAll('.rbac-admin-only').forEach(el => {
+      el.style.display = isAdmin ? '' : 'none';
+    });
+    const offVariantLabel = document.getElementById('label-off-variant');
+    if (offVariantLabel) {
+      offVariantLabel.textContent = isAdmin ? 'Giấy / Biến thể (bảng giá In Thành Danh)' : 'Giấy / Biến thể sản phẩm';
+    }
 
     // Ẩn cột Tiến Độ Xưởng In với Sales
     const workshopCol = document.getElementById('dashboard-workshop-col');
@@ -642,7 +658,36 @@ const App = {
       errBox.style.display = 'none';
       this.state.currentPricingCalc = data;
 
-      document.getElementById('calc-metrics').innerHTML = data.metrics.map(m => `
+      const isAdmin = (this.state.currentRole === 'ADMIN');
+      const isSales = (this.state.currentRole === 'SALES');
+
+      // Với quyền không phải Admin: lọc bỏ hoặc ẩn tên xưởng, tên bảng giá xưởng (NCC)
+      let metrics = data.metrics || [];
+      let impositionNote = data.impositionNote || '';
+
+      if (!isAdmin) {
+        metrics = metrics
+          .filter(m => {
+            const lbl = (m.label || '').toLowerCase();
+            return !lbl.includes('ncc') && !lbl.includes('giá gốc') && !lbl.includes('cách tính');
+          })
+          .map(m => {
+            let val = m.value || '';
+            // Ẩn tên xưởng và tên bảng giá xưởng nếu có trong nội dung
+            val = val.replace(/(?:bảng giá|xưởng|nhà cung cấp|ncc)\s*(?:in\s+)?(?:thành danh|ngọc minh|sắc kim|ttl copier|đại nam)[^—\–\-\,]*/gi, 'Tiêu chuẩn kỹ thuật')
+                     .replace(/\(tính giá NCC\)/gi, '')
+                     .replace(/\s+/g, ' ')
+                     .trim();
+            return { ...m, value: val };
+          });
+
+        impositionNote = impositionNote
+          .replace(/(?:theo bảng giá|theo bảng|tại xưởng|xưởng)\s*(?:in\s+)?(?:thành danh|ngọc minh|sắc kim|ttl copier|đại nam)[^\.\,]*/gi, 'theo tiêu chuẩn sản xuất')
+          .replace(/(?:thành danh|ngọc minh|sắc kim|ttl copier|đại nam)/gi, 'xưởng đối tác')
+          .trim();
+      }
+
+      document.getElementById('calc-metrics').innerHTML = metrics.map(m => `
         <div class="calc-row"><span>${m.label}:</span><span style="font-weight:600; color: var(--text-main); text-align:right;">${m.value}</span></div>
       `).join('');
 
@@ -660,10 +705,9 @@ const App = {
       if (data.minOrderApplied) unitTxt += ` · áp giá tối thiểu ${this.formatCurrency(data.minOrder)}`;
       document.getElementById('res-unit-rate').textContent = unitTxt;
       document.getElementById('res-profit-margin').textContent = `Lợi nhuận gộp dự kiến: ${this.formatCurrency(data.grossProfit)} (Margin ${data.actualMargin}%)`;
-      document.getElementById('imposition-sheet-note').textContent = data.impositionNote;
+      document.getElementById('imposition-sheet-note').textContent = impositionNote;
       this.renderImpositionSvg(data.layout, data.group);
 
-      const isSales = (this.state.currentRole === 'SALES');
       document.querySelectorAll('.col-cost-profit').forEach(el => { el.style.display = isSales ? 'none' : ''; });
     } catch (err) {
       this.state.currentPricingCalc = null;
