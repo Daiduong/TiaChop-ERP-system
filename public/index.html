@@ -72,6 +72,10 @@
           <span class="icon">💰</span>
           <span>Tài Chính & Công Nợ</span>
         </a>
+        <a class="nav-item" data-tab="management" id="nav-management">
+          <span class="icon">📊</span>
+          <span>Báo Cáo Quản Trị</span>
+        </a>
         <a class="nav-item" data-tab="admin" id="nav-admin" style="margin-top:12px; border-top:1px solid var(--border-subtle); padding-top:14px;">
           <span class="icon">⚙️</span>
           <span>Quản Trị Hệ Thống</span>
@@ -862,7 +866,225 @@
           </div>
         </section>
 
-        <!-- ==================== TAB 7: QUẢN TRỊ HỆ THỐNG ==================== -->
+        <!-- ==================== TAB 7: BÁO CÁO QUẢN TRỊ (MANAGEMENT BI) ==================== -->
+        <section class="tab-view" id="tab-management">
+          <!-- Thanh điều khiển kỳ báo cáo & Action -->
+          <div class="card-panel" style="margin-bottom: 20px;">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="panel-title">📊 Báo Cáo Quản Trị &amp; Chỉ Số Điều Hành (BI Analytics)</h2>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                  Phân tích Doanh thu, Lợi nhuận gộp, Hiệu suất Sales, Xếp hạng Khách hàng 80/20 &amp; Chi phí Xưởng gia công.
+                </p>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <button class="btn btn-secondary btn-sm" onclick="Management.exportExcel()">📥 Xuất Excel Báo Cáo</button>
+                <button class="btn btn-primary btn-sm" onclick="Management.printReport()">🖨️ In Báo Cáo Giám Đốc (PDF)</button>
+              </div>
+            </div>
+
+            <!-- Bộ lọc thời gian -->
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border-subtle);">
+              <div>
+                <label class="form-label">Khoảng thời gian nhanh</label>
+                <select class="form-control" id="mgmt-quick-period" onchange="Management.onQuickPeriodChange(this.value)">
+                  <option value="ALL">Toàn thời gian</option>
+                  <option value="THIS_MONTH" selected>Tháng này</option>
+                  <option value="LAST_MONTH">Tháng trước</option>
+                  <option value="THIS_QUARTER">Quý này</option>
+                  <option value="THIS_YEAR">Năm nay</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Từ ngày</label>
+                <input type="date" class="form-control" id="mgmt-date-from">
+              </div>
+              <div>
+                <label class="form-label">Đến ngày</label>
+                <input type="date" class="form-control" id="mgmt-date-to">
+              </div>
+              <button class="btn btn-accent btn-sm" onclick="Management.loadData()">🔍 Lọc Dữ Liệu</button>
+            </div>
+          </div>
+
+          <!-- KPI Cards Tổng Quan -->
+          <div class="stats-grid" style="margin-bottom: 24px;">
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Doanh Thu Thuần</span>
+                <span class="stat-icon icon-blue">💰</span>
+              </div>
+              <div class="stat-value" id="mgmt-kpi-revenue" style="color:var(--primary-light);">0 đ</div>
+              <div class="stat-sub" id="mgmt-kpi-orders-count">0 đơn hàng chốt</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Lợi Nhuận Gộp (Gross Profit)</span>
+                <span class="stat-icon icon-green">📈</span>
+              </div>
+              <div class="stat-value" id="mgmt-kpi-profit" style="color:var(--accent-green);">0 đ</div>
+              <div class="stat-sub" id="mgmt-kpi-margin">Tỷ suất LN gộp: 0%</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Giá Vốn Xưởng &amp; Vật Tư</span>
+                <span class="stat-icon icon-purple">🏭</span>
+              </div>
+              <div class="stat-value" id="mgmt-kpi-cost" style="color:var(--accent-amber);">0 đ</div>
+              <div class="stat-sub" id="mgmt-kpi-cost-sub">Chi phí sản xuất gia công</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Công Nợ Phải Thu (AR)</span>
+                <span class="stat-icon icon-amber">⏳</span>
+              </div>
+              <div class="stat-value" id="mgmt-kpi-debt" style="color:var(--accent-rose);">0 đ</div>
+              <div class="stat-sub" id="mgmt-kpi-avg-order">Giá trị TB: 0 đ/đơn</div>
+            </div>
+          </div>
+
+          <!-- Nhóm 1: Báo cáo Hiệu suất Đội ngũ Sales -->
+          <div class="card-panel" style="margin-bottom: 24px;">
+            <div class="panel-header">
+              <div>
+                <h3 class="panel-title">💼 1. Báo Cáo Hiệu Suất Đội Ngũ Kinh Doanh (Sales Performance)</h3>
+                <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                  Xếp hạng doanh số chốt đơn, lợi nhuận gộp và mức độ kiểm soát công nợ của từng nhân sự Sales.
+                </p>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="mgmt-sales-table">
+                <thead>
+                  <tr>
+                    <th>Xếp Hạng</th>
+                    <th>Nhân Viên Sales</th>
+                    <th style="text-align: center;">Số Đơn Chốt</th>
+                    <th style="text-align: center;">Số Báo Giá</th>
+                    <th style="text-align: right;">Tổng Doanh Thu</th>
+                    <th style="text-align: right; color:var(--accent-green);">Lợi Nhuận Gộp</th>
+                    <th style="text-align: center;">Biên LN (%)</th>
+                    <th style="text-align: right; color:var(--accent-rose);">Công Nợ Đang QL</th>
+                  </tr>
+                </thead>
+                <tbody id="mgmt-sales-tbody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Nhóm 2 & 3: Top Khách hàng 80/20 & Phân bổ Xưởng in (2 Cột) -->
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- Top Khách Hàng -->
+            <div class="card-panel" style="margin-bottom: 0;">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">👥 2. Top Khách Hàng Trọng Tâm (Quy Tắc 80/20)</h3>
+                  <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                    Các tài khoản doanh nghiệp &amp; chuỗi F&amp;B đóng góp doanh số chủ lực.
+                  </p>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="mgmt-cust-table">
+                  <thead>
+                    <tr>
+                      <th>Khách Hàng</th>
+                      <th style="text-align: center;">Đơn</th>
+                      <th style="text-align: right;">Doanh Thu</th>
+                      <th style="text-align: right; color:var(--accent-green);">Lợi Nhuận</th>
+                      <th style="text-align: right; color:var(--accent-rose);">Còn Nợ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mgmt-cust-tbody">
+                    <!-- Injected via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Chi Phí Xưởng Gia Công & Điều Phối -->
+            <div class="card-panel" style="margin-bottom: 0;">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">🏭 3. Chi Phí Gia Công &amp; Điều Phối Xưởng</h3>
+                  <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                    Phân bổ tỷ trọng chi phí xưởng theo thế mạnh kỹ thuật.
+                  </p>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="mgmt-sup-table">
+                  <thead>
+                    <tr>
+                      <th>Xưởng In / NCC</th>
+                      <th style="text-align: center;">Hạng Mục</th>
+                      <th style="text-align: right; color:var(--accent-amber);">Tiền Gia Công</th>
+                      <th style="text-align: right;">Giá Bán Ra</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mgmt-sup-tbody">
+                    <!-- Injected via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nhóm 4 & 5: Dòng tiền thực tế & Cơ cấu nhóm khách hàng -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <!-- Cơ cấu nhóm khách hàng -->
+            <div class="card-panel">
+              <div class="panel-header">
+                <h3 class="panel-title">🏢 4. Doanh Số Theo Nhóm Khách Hàng</h3>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="mgmt-group-table">
+                  <thead>
+                    <tr>
+                      <th>Nhóm Khách Hàng</th>
+                      <th style="text-align: center;">Số KH</th>
+                      <th style="text-align: center;">Số Đơn</th>
+                      <th style="text-align: right;">Doanh Thu</th>
+                      <th style="text-align: right; color:var(--accent-green);">Lợi Nhuận</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mgmt-group-tbody">
+                    <!-- Injected via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Dòng tiền Thu Chi Thực Tế -->
+            <div class="card-panel">
+              <div class="panel-header">
+                <h3 class="panel-title">💳 5. Tổng Hợp Dòng Tiền Thu Chi Thực Tế</h3>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table" id="mgmt-cash-table">
+                  <thead>
+                    <tr>
+                      <th>Loại Giao Dịch</th>
+                      <th>Phương Thức</th>
+                      <th style="text-align: center;">Số GD</th>
+                      <th style="text-align: right;">Tổng Tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mgmt-cash-tbody">
+                    <!-- Injected via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== TAB 8: QUẢN TRỊ HỆ THỐNG ==================== -->
         <section class="tab-view" id="tab-admin">
           <div class="filter-tabs" id="admin-subtabs">
             <button class="filter-btn active" data-admin-sub="users">👤 Người Dùng & Phân Quyền</button>
@@ -1554,7 +1776,7 @@
     // Cache-buster: tải lại JS với version mới khi có thay đổi
     (function() {
       var v = Date.now();
-      var scripts = ['/js/app.js', '/js/admin.js', '/js/reports.js', '/js/auth.js'];
+      var scripts = ['/js/app.js', '/js/admin.js', '/js/reports.js', '/js/management.js', '/js/auth.js'];
       scripts.forEach(function(src) {
         var s = document.createElement('script');
         s.src = src + '?v=' + v;

@@ -28,6 +28,7 @@ app.use('/api/admin/backup', auth.requireAuth, auth.requireRole('ADMIN'), backup
 app.use('/api/excel', auth.requireAuth, excelRoutes);
 app.use('/api/finance', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'));
 app.use('/api/reports', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'), require('./reports'));
+app.use('/api/management-reports', auth.requireAuth, auth.requireRole('ADMIN', 'ACCOUNTANT'), require('./management_reports'));
 app.post('/api/suppliers', auth.requireAuth, auth.requireRole('ADMIN', 'COORDINATOR'));
 app.use('/api', auth.requireAuth, auth.maskCostForSales, apiRoutes);
 

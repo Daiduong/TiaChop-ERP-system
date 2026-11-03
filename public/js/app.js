@@ -29,9 +29,9 @@ const App = {
 
   // Menu (tab) được phép truy cập theo vai trò
   ROLE_TABS: {
-    ADMIN: ['dashboard', 'pricing', 'orders', 'suppliers', 'customers', 'finance', 'admin'],
+    ADMIN: ['dashboard', 'pricing', 'orders', 'suppliers', 'customers', 'finance', 'management', 'admin'],
     SALES: ['dashboard', 'pricing', 'orders', 'customers'],
-    ACCOUNTANT: ['dashboard', 'orders', 'customers', 'finance'],
+    ACCOUNTANT: ['dashboard', 'orders', 'customers', 'finance', 'management'],
     COORDINATOR: ['dashboard', 'orders', 'suppliers']
   },
 
@@ -221,6 +221,7 @@ const App = {
       suppliers: 'Xưởng In Gia Công & SRM',
       customers: 'Quản Lý Khách Hàng (CRM)',
       finance: 'Dòng Tiền, Sổ Công Nợ & Thuế',
+      management: 'Báo Cáo Quản Trị & Chỉ Số Điều Hành (BI Analytics)',
       admin: 'Quản Trị Hệ Thống'
     };
     const titleEl = document.getElementById('page-title');
@@ -245,6 +246,7 @@ const App = {
     if (tabId === 'suppliers') this.loadSuppliers();
     if (tabId === 'customers') this.loadCustomers();
     if (tabId === 'finance') { this.loadFinance(); if (window.Reports) Reports.init(); }
+    if (tabId === 'management' && window.Management) Management.init();
     if (tabId === 'admin' && window.Admin) Admin.load();
   },
 
