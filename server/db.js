@@ -67,6 +67,7 @@ function initDatabase() {
       delivery_deadline DATE,
       shipping_address TEXT,
       shipping_fee REAL DEFAULT 0,
+      shipping_payer TEXT DEFAULT 'CUSTOMER', -- CUSTOMER (Khách trả trực tiếp cho shipper/COD), ADVANCE_COLLECT (Mình ứng trước - gom thu khách cuối tháng & xuất HĐ), SHOP (Mình trả / Miễn phí ship)
       shipping_method TEXT, -- Ahamove, Grab, ViettelPost, GHTK, Xe ôm, Giao hàng trực tiếp, Khách tự lấy
       tracking_code TEXT,
       recipient_name TEXT,
@@ -171,6 +172,7 @@ function initDatabase() {
 function ensureDeliveryColumns() {
   const deliveryCols = [
     { name: 'shipping_fee', type: 'REAL DEFAULT 0' },
+    { name: 'shipping_payer', type: "TEXT DEFAULT 'CUSTOMER'" },
     { name: 'shipping_method', type: 'TEXT' },
     { name: 'tracking_code', type: 'TEXT' },
     { name: 'recipient_name', type: 'TEXT' },
@@ -273,7 +275,11 @@ function ensurePricingMatrixConfigs() {
     ['DOCUMENT', 'Ruột F80 trắng đen 2 mặt (Khổ A4)', 'DOC_RUOT_A4_BW_2S', 350, 'tờ'],
     ['DOCUMENT', 'Ruột F80 trắng đen 1 mặt (Khổ A4)', 'DOC_RUOT_A4_BW_1S', 250, 'tờ'],
     ['DOCUMENT', 'Ruột F80 trắng đen 2 mặt (Khổ A5)', 'DOC_RUOT_A5_BW_2S', 200, 'tờ'],
-    ['DOCUMENT', 'Ruột F80 trắng đen 1 mặt (Khổ A5)', 'DOC_RUOT_A5_BW_1S', 225, 'tờ']
+    ['DOCUMENT', 'Ruột F80 trắng đen 1 mặt (Khổ A5)', 'DOC_RUOT_A5_BW_1S', 225, 'tờ'],
+    // Nhóm 5 - Vận chuyển & Giao hàng (Có VAT)
+    ['SHIPPING', 'Phí giao hàng nội thành (Ahamove/Grab bike)', 'SHIP_INNER_CITY', 30000, 'chuyến'],
+    ['SHIPPING', 'Phí giao hàng ngoại thành / cồng kềnh (Ba gác/Van)', 'SHIP_SUBURBAN', 50000, 'chuyến'],
+    ['SHIPPING', 'Phí giao hàng gửi Chành xe / Bến xe / Tỉnh', 'SHIP_PROVINCE', 80000, 'chuyến']
   ];
   const exists = db.prepare('SELECT 1 FROM print_configs WHERE code = ?');
   rows.forEach(([cat, name, code, cost, unit]) => {

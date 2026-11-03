@@ -20,6 +20,7 @@ window.Admin = {
     PAPER: '📄 Giấy',
     FINISHING: '✂️ Gia công',
     DOCUMENT: '📚 Đóng cuốn tài liệu',
+    SHIPPING: '🚚 Vận chuyển & Giao hàng',
     GENERAL: '⚙️ Chung & Phân bổ',
     DIGITAL: '🖨️ KTS Thông số',
     OFFSET: '🏭 Offset Thông số',

@@ -432,10 +432,20 @@ router.get('/vat-invoices/:id/print', (req, res) => {
   const S = getSettings();
   const orders = db.prepare('SELECT * FROM orders WHERE vat_invoice_id = ? ORDER BY created_at').all(inv.id);
   const itemStmt = db.prepare('SELECT item_name, quantity, unit FROM order_items WHERE order_id = ?');
-  const body = orders.map((o, i) => `<tr><td style="text-align:center">${i + 1}</td><td>${esc(o.code)}</td><td style="text-align:center">${fmtDate(o.created_at)}</td>
-    <td>${esc(itemStmt.all(o.id).map(it => `${it.item_name} (${it.quantity} ${it.unit || ''})`).join('; '))}</td>
+  const body = orders.map((o, i) => {
+    let itemsText = itemStmt.all(o.id).map(it => `${it.item_name} (${it.quantity} ${it.unit || ''})`).join('; ');
+    if (o.shipping_fee > 0) {
+      if (o.shipping_payer === 'ADVANCE_COLLECT') {
+        itemsText += ` + Cước giao hàng ứng trước gom thu: ${money(o.shipping_fee)} đ`;
+      } else if (o.shipping_payer === 'CUSTOMER') {
+        itemsText += ` + Phí giao hàng: ${money(o.shipping_fee)} đ`;
+      }
+    }
+    return `<tr><td style="text-align:center">${i + 1}</td><td>${esc(o.code)}</td><td style="text-align:center">${fmtDate(o.created_at)}</td>
+    <td>${esc(itemsText)}</td>
     <td style="text-align:right">${money(o.total_selling - o.vat_amount)}</td><td style="text-align:center">${o.vat_rate}%</td>
-    <td style="text-align:right">${money(o.vat_amount)}</td><td style="text-align:right">${money(o.total_selling)}</td></tr>`).join('');
+    <td style="text-align:right">${money(o.vat_amount)}</td><td style="text-align:right">${money(o.total_selling)}</td></tr>`;
+  }).join('');
   const inner = companyHeader(S) + `<h1>BẢNG KÊ KÈM HÓA ĐƠN GTGT</h1>
     <div style="text-align:center;font-size:10pt">Số hóa đơn: <b>${esc(inv.invoice_no)}</b> • Ngày: ${fmtDate(inv.invoice_date)} ${inv.status === 'CANCELLED' ? '• (ĐÃ HỦY)' : ''}</div>
     ${customerBlock(customer)}

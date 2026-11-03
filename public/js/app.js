@@ -1132,7 +1132,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             </td>
             <td style="font-weight:700; color:var(--primary-light);">
               ${this.formatCurrency(o.total_selling)}
-              ${o.shipping_fee > 0 ? `<div style="font-size:10px; color:var(--primary-light);">🚚 Ship: +${this.formatCurrency(o.shipping_fee)}</div>` : ''}
+              ${o.shipping_fee > 0 ? `
+                <div style="font-size:10px; color:${o.shipping_payer === 'SHOP' ? 'var(--accent-green)' : (o.shipping_payer === 'ADVANCE_COLLECT' ? 'var(--accent-amber)' : 'var(--primary-light)')};">
+                  🚚 Ship: ${o.shipping_payer === 'SHOP' 
+                    ? `Shop trả (${this.formatCurrency(o.shipping_fee)})` 
+                    : (o.shipping_payer === 'ADVANCE_COLLECT' 
+                        ? `Ứng gom thu (+${this.formatCurrency(o.shipping_fee)})` 
+                        : `+${this.formatCurrency(o.shipping_fee)}`)}
+                </div>
+              ` : ''}
               ${o.vat_rate > 0 ? `<div style="font-size:10px; color:var(--text-dim);">Gồm VAT ${o.vat_rate}%</div>` : ''}
             </td>
             <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} color:var(--accent-amber); font-weight:600;">
@@ -1245,6 +1253,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     document.getElementById('form-order-discount').value = 0;
     document.getElementById('form-order-vat-rate').value = 8;
     document.getElementById('form-order-shipping-fee').value = 0;
+    document.getElementById('form-order-shipping-payer').value = 'CUSTOMER';
     document.getElementById('form-order-shipping-method').value = 'Ahamove';
     document.getElementById('form-order-tracking-code').value = '';
     document.getElementById('form-order-recipient-name').value = '';
@@ -1314,6 +1323,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('form-order-deadline').value = o.delivery_deadline ? o.delivery_deadline.substring(0, 10) : '';
       document.getElementById('form-order-address').value = o.shipping_address || '';
       document.getElementById('form-order-shipping-fee').value = o.shipping_fee || 0;
+      document.getElementById('form-order-shipping-payer').value = o.shipping_payer || 'CUSTOMER';
       document.getElementById('form-order-shipping-method').value = o.shipping_method || 'Ahamove';
       document.getElementById('form-order-tracking-code').value = o.tracking_code || '';
       document.getElementById('form-order-recipient-name').value = o.recipient_name || '';
@@ -1535,6 +1545,45 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     this.calculateOrderTotals();
   },
 
+  // Thêm nhanh 1 dòng sản phẩm là "Cước phí giao hàng / Vận chuyển" (được tính VAT theo tỷ lệ của đơn)
+  addShippingOrderItemRow(presetType) {
+    let fee = 30000;
+    let label = 'Dịch vụ vận chuyển / Giao hàng nội thành';
+    
+    if (presetType === 'SUBURBAN') {
+      fee = 50000;
+      label = 'Dịch vụ vận chuyển ngoại thành / cồng kềnh';
+    } else if (presetType === 'PROVINCE') {
+      fee = 80000;
+      label = 'Dịch vụ vận chuyển gửi Chành xe / Tỉnh';
+    } else {
+      const inputFee = parseFloat(document.getElementById('form-order-shipping-fee')?.value);
+      if (inputFee && inputFee > 0) {
+        fee = inputFee;
+        label = 'Dịch vụ vận chuyển / Giao hàng';
+      }
+    }
+
+    const method = document.getElementById('form-order-shipping-method')?.value || 'Ahamove / Giao hàng';
+    const address = document.getElementById('form-order-address')?.value || '';
+
+    // Khi đã đưa cước giao hàng vào line item có tính VAT, reset ô phí ship phụ bên dưới về 0 để tránh tính trùng
+    const feeInput = document.getElementById('form-order-shipping-fee');
+    if (feeInput && parseFloat(feeInput.value) > 0) {
+      feeInput.value = 0;
+    }
+
+    this.addOrderItemRow({
+      item_name: label,
+      quantity: 1,
+      unit: 'chuyến',
+      unit_cost: fee,
+      unit_price: fee,
+      specs: `Giao hàng tận nơi (${method}${address ? ' - ' + address : ''}) - Chịu thuế VAT`,
+      imposition_info: 'Cước vận chuyển / shipper giao tận nơi'
+    });
+  },
+
   calculateOrderTotals() {
     let subtotal = 0;
     let totalCost = 0;
@@ -1552,18 +1601,36 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const discountAmount = parseFloat(document.getElementById('form-order-discount').value) || 0;
     const vatRate = parseFloat(document.getElementById('form-order-vat-rate').value) || 0;
     const shippingFee = parseFloat(document.getElementById('form-order-shipping-fee')?.value) || 0;
+    const shippingPayer = document.getElementById('form-order-shipping-payer')?.value || 'CUSTOMER';
 
     const afterDiscount = Math.max(0, subtotal - discountAmount);
     const vatAmount = (afterDiscount * vatRate) / 100;
-    const grandTotal = afterDiscount + vatAmount + Math.max(0, shippingFee);
-    const grossProfit = afterDiscount - totalCost;
+    // Khách trả hoặc Shop ứng trước gom thu thì cộng vào Grand Total; Shop trả (Freeship) thì không cộng vào khách
+    const shippingFeeToAdd = (shippingPayer === 'CUSTOMER' || shippingPayer === 'ADVANCE_COLLECT') ? Math.max(0, shippingFee) : 0;
+    const grandTotal = afterDiscount + vatAmount + shippingFeeToAdd;
+
+    // Nếu shop trả phí ship thì tính vào chi phí đơn hàng
+    const shopShippingCost = (shippingPayer === 'SHOP') ? Math.max(0, shippingFee) : 0;
+    const grossProfit = afterDiscount - totalCost - shopShippingCost;
 
     document.getElementById('order-calc-subtotal').textContent = this.formatCurrency(subtotal);
     document.getElementById('order-calc-vat').textContent = this.formatCurrency(vatAmount);
     const shippingFeeEl = document.getElementById('order-calc-shipping-fee');
-    if (shippingFeeEl) shippingFeeEl.textContent = this.formatCurrency(shippingFee);
+    if (shippingFeeEl) {
+      if (shippingFee > 0) {
+        if (shippingPayer === 'CUSTOMER') {
+          shippingFeeEl.textContent = `${this.formatCurrency(shippingFee)} (Khách trả)`;
+        } else if (shippingPayer === 'ADVANCE_COLLECT') {
+          shippingFeeEl.textContent = `${this.formatCurrency(shippingFee)} (Ứng gom thu cuối tháng)`;
+        } else {
+          shippingFeeEl.textContent = `0 đ (Shop bao ship ${this.formatCurrency(shippingFee)})`;
+        }
+      } else {
+        shippingFeeEl.textContent = '0 đ';
+      }
+    }
     document.getElementById('order-calc-grand-total').textContent = this.formatCurrency(grandTotal);
-    document.getElementById('order-calc-total-cost').textContent = this.formatCurrency(totalCost);
+    document.getElementById('order-calc-total-cost').textContent = this.formatCurrency(totalCost + shopShippingCost);
     document.getElementById('order-calc-gross-profit').textContent = this.formatCurrency(grossProfit);
   },
 
@@ -1579,6 +1646,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const deadline = document.getElementById('form-order-deadline').value;
     const address = document.getElementById('form-order-address').value;
     const shippingFee = parseFloat(document.getElementById('form-order-shipping-fee')?.value) || 0;
+    const shippingPayer = document.getElementById('form-order-shipping-payer')?.value || 'CUSTOMER';
     const shippingMethod = document.getElementById('form-order-shipping-method')?.value || '';
     const trackingCode = document.getElementById('form-order-tracking-code')?.value || '';
     const recipientName = document.getElementById('form-order-recipient-name')?.value || '';
@@ -1629,6 +1697,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         delivery_deadline: deadline,
         shipping_address: address,
         shipping_fee: shippingFee,
+        shipping_payer: shippingPayer,
         shipping_method: shippingMethod,
         tracking_code: trackingCode,
         recipient_name: recipientName,
@@ -1743,6 +1812,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
       document.getElementById('delivery-form-status').value = ['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(o.status) ? o.status : 'DELIVERING';
       document.getElementById('delivery-form-fee').value = o.shipping_fee || 0;
+      document.getElementById('delivery-form-payer').value = o.shipping_payer || 'CUSTOMER';
       document.getElementById('delivery-form-method').value = o.shipping_method || 'Ahamove';
       document.getElementById('delivery-form-tracking').value = o.tracking_code || '';
       document.getElementById('delivery-form-recipient-name').value = o.recipient_name || o.contact_name || o.customer_name || '';
@@ -1762,6 +1832,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
     const status = document.getElementById('delivery-form-status').value;
     const shipping_fee = parseFloat(document.getElementById('delivery-form-fee').value) || 0;
+    const shipping_payer = document.getElementById('delivery-form-payer').value;
     const shipping_method = document.getElementById('delivery-form-method').value;
     const tracking_code = document.getElementById('delivery-form-tracking').value.trim();
     const recipient_name = document.getElementById('delivery-form-recipient-name').value.trim();
@@ -1776,6 +1847,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         body: JSON.stringify({
           status,
           shipping_fee,
+          shipping_payer,
           shipping_method,
           tracking_code,
           recipient_name,
@@ -2343,7 +2415,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
           </div>
           <div style="text-align:right; font-size:10pt;">
-            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            ${order.shipping_fee > 0 ? `
+              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
+                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
+                  (${order.shipping_payer === 'SHOP' 
+                    ? 'Tia Chớp thanh toán / Freeship' 
+                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
+                </span>
+              </div>
+            ` : ''}
             <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
               TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
             </div>
@@ -2667,8 +2747,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           ` : ''}
           ${order.shipping_fee > 0 ? `
             <tr>
-              <td colspan="5" style="text-align:right;">Phí vận chuyển (${order.shipping_method || 'Giao hàng'}):</td>
-              <td style="text-align:right;">${this.formatNumber(order.shipping_fee)}</td>
+              <td colspan="5" style="text-align:right;">
+                Phí vận chuyển (${order.shipping_method || 'Giao hàng'}) - 
+                ${order.shipping_payer === 'SHOP' 
+                  ? 'Shop hỗ trợ phí ship' 
+                  : (order.shipping_payer === 'ADVANCE_COLLECT' ? 'Tia Chớp ứng trước (gom thu cuối tháng)' : 'Khách trả')}:
+              </td>
+              <td style="text-align:right; ${order.shipping_payer === 'SHOP' ? 'color:green;' : 'font-weight:600;'}">
+                ${order.shipping_payer === 'SHOP' ? '0 đ (Miễn phí)' : `${this.formatNumber(order.shipping_fee)} đ`}
+              </td>
             </tr>
           ` : ''}
           <tr>
@@ -2795,7 +2882,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
           </div>
           <div style="text-align:right; font-size:10pt;">
-            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            ${order.shipping_fee > 0 ? `
+              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
+                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
+                  (${order.shipping_payer === 'SHOP' 
+                    ? 'Tia Chớp thanh toán / Freeship' 
+                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
+                </span>
+              </div>
+            ` : ''}
             <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
               TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
             </div>
@@ -2982,7 +3077,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
           </div>
           <div style="text-align:right; font-size:10pt;">
-            ${order.shipping_fee > 0 ? `<div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong></div>` : ''}
+            ${order.shipping_fee > 0 ? `
+              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
+                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
+                  (${order.shipping_payer === 'SHOP' 
+                    ? 'Tia Chớp thanh toán / Freeship' 
+                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
+                </span>
+              </div>
+            ` : ''}
             <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
               TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
             </div>

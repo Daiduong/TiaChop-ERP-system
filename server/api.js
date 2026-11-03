@@ -461,6 +461,7 @@ router.post('/orders', (req, res) => {
       delivery_deadline,
       shipping_address,
       shipping_fee = 0,
+      shipping_payer = 'CUSTOMER',
       shipping_method = '',
       tracking_code = '',
       recipient_name = '',
@@ -498,9 +499,16 @@ router.post('/orders', (req, res) => {
     const parsedVatRate = parseFloat(vat_rate) || 0;
     const vat_amount = (finalSellingAfterDiscount * parsedVatRate) / 100;
     const parsedShippingFee = Math.max(0, parseFloat(shipping_fee) || 0);
-    const grand_total = finalSellingAfterDiscount + vat_amount + parsedShippingFee;
+    const payer = ['CUSTOMER', 'ADVANCE_COLLECT', 'SHOP'].includes(shipping_payer) ? shipping_payer : 'CUSTOMER';
+    // Phí ship cộng vào tổng tiền đơn hàng khi:
+    // 1. CUSTOMER: Khách thanh toán kèm vào đơn hàng
+    // 2. ADVANCE_COLLECT: Mình ứng trước trả shipper, gom thu khách cuối tháng & xuất hóa đơn chung
+    const shippingFeeToAdd = (payer === 'CUSTOMER' || payer === 'ADVANCE_COLLECT') ? parsedShippingFee : 0;
+    const grand_total = finalSellingAfterDiscount + vat_amount + shippingFeeToAdd;
 
-    const gross_profit = finalSellingAfterDiscount - total_cost;
+    // Nếu SHOP trả phí ship (Freeship), đây là chi phí công ty tự chịu
+    const shopShippingCost = (payer === 'SHOP') ? parsedShippingFee : 0;
+    const gross_profit = finalSellingAfterDiscount - total_cost - shopShippingCost;
     const parsedDeposit = parseFloat(deposit_amount) || 0;
     const remaining_amount = Math.max(0, grand_total - parsedDeposit);
 
@@ -516,15 +524,15 @@ router.post('/orders', (req, res) => {
     const insertOrder = db.prepare(`
       INSERT INTO orders (
         id, code, type, customer_id, contact_id, status, delivery_deadline, shipping_address,
-        shipping_fee, shipping_method, tracking_code, recipient_name, recipient_phone, delivery_notes,
+        shipping_fee, shipping_payer, shipping_method, tracking_code, recipient_name, recipient_phone, delivery_notes,
         vat_rate, vat_amount, discount_amount, total_selling, total_cost, gross_profit,
         deposit_amount, remaining_amount, payment_status, notes, created_by, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insertOrder.run(
       id, code, type, customer_id, contact_id || null, initialStatus, delivery_deadline || null, shipping_address || '',
-      parsedShippingFee, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
+      parsedShippingFee, payer, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost, gross_profit,
       parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trân', req.user?.id || null
     );
@@ -585,6 +593,7 @@ router.put('/orders/:id', (req, res) => {
       delivery_deadline,
       shipping_address,
       shipping_fee = 0,
+      shipping_payer = 'CUSTOMER',
       shipping_method = '',
       tracking_code = '',
       recipient_name = '',
@@ -611,8 +620,12 @@ router.put('/orders/:id', (req, res) => {
     const parsedVatRate = parseFloat(vat_rate) || 0;
     const vat_amount = (finalSellingAfterDiscount * parsedVatRate) / 100;
     const parsedShippingFee = Math.max(0, parseFloat(shipping_fee) || 0);
-    const grand_total = finalSellingAfterDiscount + vat_amount + parsedShippingFee;
-    const gross_profit = finalSellingAfterDiscount - total_cost;
+    const payer = ['CUSTOMER', 'ADVANCE_COLLECT', 'SHOP'].includes(shipping_payer) ? shipping_payer : 'CUSTOMER';
+    const shippingFeeToAdd = (payer === 'CUSTOMER' || payer === 'ADVANCE_COLLECT') ? parsedShippingFee : 0;
+    const grand_total = finalSellingAfterDiscount + vat_amount + shippingFeeToAdd;
+
+    const shopShippingCost = (payer === 'SHOP') ? parsedShippingFee : 0;
+    const gross_profit = finalSellingAfterDiscount - total_cost - shopShippingCost;
 
     // Tính lại số tiền còn nợ dựa trên deposit_amount hiện tại trong DB
     const totalPaid = db.prepare(`
@@ -628,14 +641,14 @@ router.put('/orders/:id', (req, res) => {
     db.prepare(`
       UPDATE orders SET
         customer_id = ?, contact_id = ?, delivery_deadline = ?, shipping_address = ?,
-        shipping_fee = ?, shipping_method = ?, tracking_code = ?, recipient_name = ?, recipient_phone = ?, delivery_notes = ?,
+        shipping_fee = ?, shipping_payer = ?, shipping_method = ?, tracking_code = ?, recipient_name = ?, recipient_phone = ?, delivery_notes = ?,
         vat_rate = ?, vat_amount = ?, discount_amount = ?, total_selling = ?, total_cost = ?,
         gross_profit = ?, remaining_amount = ?, payment_status = ?, notes = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       customer_id, contact_id || null, delivery_deadline || null, shipping_address || '',
-      parsedShippingFee, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
+      parsedShippingFee, payer, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost,
       gross_profit, remaining_amount, payment_status, notes,
       req.params.id
@@ -690,6 +703,7 @@ router.patch('/orders/:id/delivery', (req, res) => {
     const {
       status,
       shipping_fee,
+      shipping_payer,
       shipping_method,
       tracking_code,
       recipient_name,
@@ -701,22 +715,32 @@ router.patch('/orders/:id/delivery', (req, res) => {
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
     if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
 
-    // Nếu có cập nhật shipping_fee thì tính lại grand_total và remaining_amount
-    let newGrandTotal = order.total_selling;
-    let newRemaining = order.remaining_amount;
-    let parsedFee = order.shipping_fee || 0;
+    // Tính lại grand_total và remaining_amount theo payer (CUSTOMER, ADVANCE_COLLECT hay SHOP)
+    const oldPayer = order.shipping_payer || 'CUSTOMER';
+    const newPayer = shipping_payer !== undefined 
+      ? (['CUSTOMER', 'ADVANCE_COLLECT', 'SHOP'].includes(shipping_payer) ? shipping_payer : 'CUSTOMER') 
+      : oldPayer;
 
-    if (shipping_fee !== undefined && shipping_fee !== null) {
-      const oldFee = order.shipping_fee || 0;
-      parsedFee = Math.max(0, parseFloat(shipping_fee) || 0);
-      const feeDiff = parsedFee - oldFee;
-      newGrandTotal = Math.max(0, order.total_selling + feeDiff);
+    const oldFee = order.shipping_fee || 0;
+    const parsedFee = (shipping_fee !== undefined && shipping_fee !== null) ? Math.max(0, parseFloat(shipping_fee) || 0) : oldFee;
 
-      const totalPaid = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) as paid FROM transactions WHERE order_id = ? AND type LIKE 'INCOME%'
-      `).get(req.params.id)?.paid || 0;
-      newRemaining = Math.max(0, newGrandTotal - totalPaid);
-    }
+    // Chi phí ship cộng vào giá bán trước đó
+    const oldFeeInSelling = (oldPayer === 'CUSTOMER' || oldPayer === 'ADVANCE_COLLECT') ? oldFee : 0;
+    const newFeeInSelling = (newPayer === 'CUSTOMER' || newPayer === 'ADVANCE_COLLECT') ? parsedFee : 0;
+    const feeDiff = newFeeInSelling - oldFeeInSelling;
+
+    const newGrandTotal = Math.max(0, order.total_selling + feeDiff);
+
+    // Tính lại remaining_amount
+    const totalPaid = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as paid FROM transactions WHERE order_id = ? AND type LIKE 'INCOME%'
+    `).get(req.params.id)?.paid || 0;
+    const newRemaining = Math.max(0, newGrandTotal - totalPaid);
+
+    // Tính lại gross_profit nếu shop chịu phí ship
+    const oldShopShip = (oldPayer === 'SHOP') ? oldFee : 0;
+    const newShopShip = (newPayer === 'SHOP') ? parsedFee : 0;
+    const newGrossProfit = order.gross_profit + oldShopShip - newShopShip;
 
     const newStatus = status || order.status;
 
@@ -724,6 +748,7 @@ router.patch('/orders/:id/delivery', (req, res) => {
       UPDATE orders SET
         status = ?,
         shipping_fee = ?,
+        shipping_payer = ?,
         shipping_method = COALESCE(?, shipping_method),
         tracking_code = COALESCE(?, tracking_code),
         recipient_name = COALESCE(?, recipient_name),
@@ -732,11 +757,13 @@ router.patch('/orders/:id/delivery', (req, res) => {
         delivery_notes = COALESCE(?, delivery_notes),
         total_selling = ?,
         remaining_amount = ?,
+        gross_profit = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       newStatus,
       parsedFee,
+      newPayer,
       shipping_method !== undefined ? shipping_method : null,
       tracking_code !== undefined ? tracking_code : null,
       recipient_name !== undefined ? recipient_name : null,
@@ -745,10 +772,11 @@ router.patch('/orders/:id/delivery', (req, res) => {
       delivery_notes !== undefined ? delivery_notes : null,
       newGrandTotal,
       newRemaining,
+      newGrossProfit,
       req.params.id
     );
 
-    res.json({ success: true, id: req.params.id, status: newStatus, shipping_fee: parsedFee });
+    res.json({ success: true, id: req.params.id, status: newStatus, shipping_fee: parsedFee, shipping_payer: newPayer });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
