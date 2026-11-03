@@ -2316,7 +2316,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         <div class="sig-col" style="text-align:center;">
           <strong>ĐIỀU PHỐI SẢN XUẤT (TIA CHỚP)</strong>
           <div style="font-size:8.5pt; color:#777; margin-top:4px;">(Ký & bàn giao file/vật tư)</div>
-          <div style="font-size:9.5pt; color:#333; margin-top:50px; font-weight:600;">Dương Trân</div>
+          <div style="font-size:9.5pt; color:#333; margin-top:50px; font-weight:600;">Dương Trần</div>
         </div>
         <div class="sig-col" style="text-align:center;">
           <strong>ĐẠI DIỆN XƯỞNG IN (${supplierName.toUpperCase()})</strong>
@@ -2329,128 +2329,6 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     window.print();
   },
 
-  async printDeliveryNote(orderId) {
-    try {
-      let order = this.state.orders.find(o => o.id === orderId);
-      if (!order || !order.items || order.items.length === 0) {
-        const res = await fetch(`/api/orders/${orderId}`);
-        order = await res.json();
-      }
-      if (!order || !order.id) {
-        alert('Không tìm thấy thông tin đơn hàng để in phiếu giao hàng!');
-        return;
-      }
-
-      const S = (window.Admin && Admin.settings) || {};
-      const C = S.primary_color || '#0284c7';
-      const printable = document.getElementById('printable-area');
-
-      const recipientName = order.recipient_name || order.contact_name || order.customer_name || 'Khách hàng';
-      const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
-      const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
-      const shippingMethod = order.shipping_method || 'Giao hàng';
-      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
-
-      printable.innerHTML = `
-        <div class="print-header" style="border-bottom-color:${C};">
-          <div class="print-logo-box">
-            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
-            <div>
-              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
-              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
-              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
-              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
-            </div>
-          </div>
-          <div class="print-company-info">
-            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
-            <div>Mã Đơn: <strong>${order.code}</strong></div>
-            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
-            <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
-          <div>
-            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
-            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
-            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
-          </div>
-          <div>
-            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
-            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
-            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
-          </div>
-        </div>
-
-        <table class="print-table">
-          <thead>
-            <tr>
-              <th style="width:35px; text-align:center;">STT</th>
-              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
-              <th style="width:90px; text-align:center;">Số Lượng</th>
-              <th style="width:70px; text-align:center;">ĐVT</th>
-              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(order.items || []).map((it, idx) => `
-              <tr>
-                <td style="text-align:center;">${idx + 1}</td>
-                <td>
-                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
-                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
-                </td>
-                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
-                <td style="text-align:center;">${it.unit || 'bộ'}</td>
-                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
-          <div style="font-size:9.5pt; color:#9a3412;">
-            <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
-            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
-          </div>
-          <div style="text-align:right; font-size:10pt;">
-            ${order.shipping_fee > 0 ? `
-              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
-                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
-                  (${order.shipping_payer === 'SHOP' 
-                    ? 'Tia Chớp thanh toán / Freeship' 
-                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
-                </span>
-              </div>
-            ` : ''}
-            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
-              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
-            </div>
-          </div>
-        </div>
-
-        <div class="print-signatures" style="margin-top:24px;">
-          <div class="sig-col">
-            <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
-          </div>
-          <div class="sig-col">
-            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
-          </div>
-          <div class="sig-col">
-            <strong>NGƯỜI NHẬN HÀNG</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
-          </div>
-        </div>
-      `;
-
-      window.print();
-    } catch (err) {
-      alert('Lỗi in phiếu giao hàng: ' + err.message);
-    }
-  },
 
   async sendJobToSupplier(itemId) {
     if (!confirm('Xác nhận GỬI XƯỞNG cho lệnh in này? (Trạng thái sẽ chuyển sang Đang in xưởng)')) return;
@@ -2675,6 +2553,8 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   // ==========================================
   // IN ẤN: PRINT QUOTE & JOB TICKET
   // ==========================================
+  // IN ẤN: BÁO GIÁ / ĐƠN HÀNG / PHIẾU GIAO / LỆNH XƯỞNG
+  // ==========================================
   async printQuote(orderId) {
     const order = this.state.orders.find(o => o.id === orderId);
     if (!order) return;
@@ -2686,37 +2566,41 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     printable.innerHTML = `
       <div class="print-header" style="border-bottom-color:${C};">
         <div class="print-logo-box">
-          <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
+          <img src="/assets/logo.png" alt="In Tia Chớp" onerror="this.style.display='none'">
           <div>
-            <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
-            <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
-            <div style="font-size:9pt; color:#555;">Hotline / Zalo: ${S.company_hotline || ''} • Email: ${S.company_email || ''}</div>
-            ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ: ${S.company_address}${S.company_tax_code ? ' • MST: ' + S.company_tax_code : ''}</div>` : ''}
+            <h2 style="color:${C};">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
+            <div style="font-size:8.8pt; color:#1e293b; font-weight:700;">${S.company_slogan || 'Dịch Vụ & Thương Mại In Ấn Chuyên Nghiệp'}</div>
+            <div style="font-size:8.5pt; color:#475569;">Hotline / Zalo: <strong>${S.company_hotline || ''}</strong> • Email: ${S.company_email || ''}</div>
+            ${S.company_address ? `<div style="font-size:8.5pt; color:#475569;">Địa chỉ: ${S.company_address}${S.company_tax_code ? ' • MST: ' + S.company_tax_code : ''}</div>` : ''}
           </div>
         </div>
         <div class="print-company-info">
-          <div style="font-size:13pt; font-weight:bold; color:${C};">${order.type === 'QUOTE' ? 'PHIẾU BÁO GIÁ' : 'XÁC NHẬN ĐƠN HÀNG'}</div>
+          <div style="font-size:13pt; font-weight:800; color:${C}; text-transform:uppercase; margin-bottom:2px;">
+            ${order.type === 'QUOTE' ? 'PHIẾU BÁO GIÁ' : 'XÁC NHẬN ĐƠN HÀNG'}
+          </div>
           <div>Mã Phiếu: <strong>${order.code}</strong></div>
-          <div>Ngày Lập: ${new Date(order.created_at).toLocaleDateString('vi-VN')}</div>
-          ${order.delivery_deadline ? `<div>Hạn Giao: ${new Date(order.delivery_deadline).toLocaleDateString('vi-VN')}</div>` : ''}
+          <div>Ngày Lập: <strong>${new Date(order.created_at).toLocaleDateString('vi-VN')}</strong></div>
+          ${order.delivery_deadline ? `<div>Hạn Giao: <strong>${new Date(order.delivery_deadline).toLocaleDateString('vi-VN')}</strong></div>` : ''}
         </div>
       </div>
 
-      <div style="margin-bottom:16px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
-        <div><strong>Kính gửi:</strong> ${order.customer_name}</div>
-        ${order.contact_name ? `<div><strong>Người liên hệ:</strong> ${order.contact_name} - ${order.contact_phone || ''}</div>` : ''}
-        <div><strong>Địa chỉ giao hàng:</strong> ${order.shipping_address || 'Theo thỏa thuận'}</div>
+      <div class="print-customer-box">
+        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <div><strong>Kính gửi:</strong> <span style="font-size:10pt; font-weight:700; color:#0f172a;">${order.customer_name}</span></div>
+          ${order.contact_name ? `<div><strong>Người liên hệ:</strong> ${order.contact_name}${order.contact_phone ? ' - <strong>' + order.contact_phone + '</strong>' : ''}</div>` : ''}
+        </div>
+        <div style="margin-top:3px;"><strong>Địa chỉ giao hàng:</strong> ${order.shipping_address || 'Theo thỏa thuận'}</div>
       </div>
 
       <table class="print-table">
         <thead>
           <tr>
-            <th style="width:35px; text-align:center;">STT</th>
-            <th>Tên Ấn Phẩm & Quy Cách Kỹ Thuật</th>
-            <th style="width:70px; text-align:center;">Số Lượng</th>
-            <th style="width:60px; text-align:center;">ĐVT</th>
-            <th style="width:100px; text-align:right;">Đơn Giá (đ)</th>
-            <th style="width:110px; text-align:right;">Thành Tiền (đ)</th>
+            <th style="width:36px; text-align:center;">STT</th>
+            <th>Tên Ấn Phẩm &amp; Quy Cách Kỹ Thuật</th>
+            <th style="width:65px; text-align:center;">Số Lượng</th>
+            <th style="width:50px; text-align:center;">ĐVT</th>
+            <th style="width:115px; text-align:right;">Đơn Giá</th>
+            <th style="width:130px; text-align:right;">Thành Tiền</th>
           </tr>
         </thead>
         <tbody>
@@ -2724,231 +2608,120 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <tr>
               <td style="text-align:center;">${idx + 1}</td>
               <td>
-                <strong>${it.item_name}</strong>
-                <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || ''}</div>
+                <strong style="color:#0f172a; font-size:9.5pt;">${it.item_name}</strong>
+                <div style="font-size:8.8pt; color:#475569; margin-top:2px; line-height:1.35;">${this.cleanSpecsForCustomer(it.specs) || it.specs || ''}</div>
               </td>
-              <td style="text-align:center;">${it.quantity}</td>
+              <td style="text-align:center; font-weight:700;">${this.formatNumber(it.quantity)}</td>
               <td style="text-align:center;">${it.unit}</td>
-              <td style="text-align:right;">${this.formatNumber(it.unit_price)}</td>
-              <td style="text-align:right; font-weight:bold;">${this.formatNumber(it.total_price)}</td>
+              <td style="text-align:right;" class="price-cell">${this.formatNumber(it.unit_price)} đ</td>
+              <td style="text-align:right; font-weight:700;" class="price-cell">${this.formatNumber(it.total_price)} đ</td>
             </tr>
           `).join('')}
           ${order.discount_amount > 0 ? `
-            <tr>
-              <td colspan="5" style="text-align:right;">Chiết khấu:</td>
-              <td style="text-align:right; color:#c00;">-${this.formatNumber(order.discount_amount)}</td>
+            <tr class="print-summary-row">
+              <td colspan="5" style="text-align:right; font-weight:600;">Chiết khấu khách hàng:</td>
+              <td style="text-align:right; color:#dc2626; font-weight:600;" class="price-cell">-${this.formatNumber(order.discount_amount)} đ</td>
             </tr>
           ` : ''}
           ${order.vat_rate > 0 ? `
-            <tr>
-              <td colspan="5" style="text-align:right;">Thuế GTGT (${order.vat_rate}%):</td>
-              <td style="text-align:right;">${this.formatNumber(order.vat_amount)}</td>
+            <tr class="print-summary-row">
+              <td colspan="5" style="text-align:right; font-weight:600;">Thuế GTGT (${order.vat_rate}%):</td>
+              <td style="text-align:right; font-weight:600;" class="price-cell">${this.formatNumber(order.vat_amount)} đ</td>
             </tr>
           ` : ''}
           ${order.shipping_fee > 0 ? `
-            <tr>
+            <tr class="print-summary-row">
               <td colspan="5" style="text-align:right;">
                 Phí vận chuyển (${order.shipping_method || 'Giao hàng'}) - 
                 ${order.shipping_payer === 'SHOP' 
-                  ? 'Shop hỗ trợ phí ship' 
-                  : (order.shipping_payer === 'ADVANCE_COLLECT' ? 'Tia Chớp ứng trước (gom thu cuối tháng)' : 'Khách trả')}:
+                  ? '<span style="color:#16a34a; font-weight:600;">Tia Chớp hỗ trợ ship</span>' 
+                  : (order.shipping_payer === 'ADVANCE_COLLECT' ? '<span style="color:#d97706; font-weight:600;">Tia Chớp ứng trước (gom thu cuối tháng)</span>' : '<span style="font-weight:600;">Khách thanh toán</span>')}:
               </td>
-              <td style="text-align:right; ${order.shipping_payer === 'SHOP' ? 'color:green;' : 'font-weight:600;'}">
-                ${order.shipping_payer === 'SHOP' ? '0 đ (Miễn phí)' : `${this.formatNumber(order.shipping_fee)} đ`}
+              <td style="text-align:right; ${order.shipping_payer === 'SHOP' ? 'color:#16a34a; font-weight:600;' : 'font-weight:700;'}" class="price-cell">
+                ${order.shipping_payer === 'SHOP' ? '0 đ (Freeship)' : `${this.formatNumber(order.shipping_fee)} đ`}
               </td>
             </tr>
           ` : ''}
-          <tr>
-            <td colspan="5" style="text-align:right; font-weight:bold; font-size:11pt;">TỔNG CỘNG:</td>
-            <td style="text-align:right; font-weight:bold; font-size:11pt; color:#0284c7;">${this.formatNumber(order.total_selling)} đ</td>
+          <tr class="print-total-row">
+            <td colspan="5" style="text-align:right; font-weight:800; font-size:10.5pt; color:#0f172a; text-transform:uppercase;">TỔNG CỘNG THANH TOÁN:</td>
+            <td style="text-align:right; font-weight:800; font-size:11pt; color:${C};" class="price-cell">${this.formatNumber(order.total_selling)} đ</td>
           </tr>
           ${order.deposit_amount > 0 ? `
-            <tr>
-              <td colspan="5" style="text-align:right;">Đã đặt cọc:</td>
-              <td style="text-align:right; color:green;">${this.formatNumber(order.deposit_amount)} đ</td>
+            <tr class="print-summary-row">
+              <td colspan="5" style="text-align:right;">Đã thanh toán / Tạm ứng:</td>
+              <td style="text-align:right; color:#16a34a; font-weight:600;" class="price-cell">${this.formatNumber(order.deposit_amount)} đ</td>
             </tr>
-            <tr>
-              <td colspan="5" style="text-align:right; font-weight:bold;">CÒN LẠI PHẢI THU:</td>
-              <td style="text-align:right; font-weight:bold; color:#c00;">${this.formatNumber(order.remaining_amount)} đ</td>
+            <tr class="print-summary-row" style="background:#fff1f2 !important;">
+              <td colspan="5" style="text-align:right; font-weight:700; color:#be123c;">CÒN LẠI PHẢI THU:</td>
+              <td style="text-align:right; font-weight:800; color:#be123c;" class="price-cell">${this.formatNumber(order.remaining_amount)} đ</td>
             </tr>
           ` : ''}
         </tbody>
       </table>
 
-      <div style="font-size:9.5pt; color:#444; margin-top:14px; line-height:1.5;">
-        <div><strong>Điều khoản thanh toán & Giao nhận:</strong></div>
+      <div class="print-terms">
+        <div style="font-weight:700; color:#0f172a; margin-bottom:3px;">Điều khoản thanh toán &amp; Giao nhận:</div>
         ${lines(order.type === 'QUOTE' ? S.quote_terms : S.order_terms)}
-        <div>• Thông tin tài khoản: <strong>${S.bank_name || ''} ${S.bank_account || ''} - ${S.bank_holder || ''}</strong>.</div>
+        <div style="margin-top:2px;">• Thông tin tài khoản: <strong>${S.bank_name || 'Vietcombank'} ${S.bank_account || '0721000556346'} - ${S.bank_holder || 'CÔNG TY TNHH TM DV IN TIA CHỚP'}</strong>.</div>
       </div>
 
       <div class="print-signatures">
         <div class="sig-col">
           <strong>${S.sign_customer_label || 'ĐẠI DIỆN KHÁCH HÀNG'}</strong>
-          <div style="font-size:9pt; color:#777; margin-top:50px;">(Ký & Ghi rõ họ tên)</div>
+          <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Ghi rõ họ tên)</div>
+          <div class="sig-space"></div>
         </div>
         <div class="sig-col">
           <strong>${S.sign_company_label || 'ĐẠI DIỆN IN TIA CHỚP'}</strong>
-          <div style="font-size:9pt; color:#777; margin-top:50px;">${S.sign_company_name || '(Ký & Ghi rõ họ tên)'}</div>
+          <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Đóng dấu)</div>
+          <div class="sig-space"></div>
+          <div style="font-weight:700; color:#0f172a;">${S.sign_company_name || 'Dương Trần'}</div>
         </div>
       </div>
     `;
 
     window.print();
-  },
-
-  async printDeliveryNote(orderId) {
-    try {
-      let order = this.state.orders.find(o => o.id === orderId);
-      if (!order || !order.items || order.items.length === 0) {
-        const res = await fetch(`/api/orders/${orderId}`);
-        order = await res.json();
-      }
-      if (!order || !order.id) {
-        alert('Không tìm thấy thông tin đơn hàng để in phiếu giao hàng!');
-        return;
-      }
-
-      const S = (window.Admin && Admin.settings) || {};
-      const C = S.primary_color || '#0284c7';
-      const printable = document.getElementById('printable-area');
-
-      const recipientName = order.recipient_name || order.contact_name || order.customer_name || 'Khách hàng';
-      const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
-      const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
-      const shippingMethod = order.shipping_method || 'Giao hàng';
-      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
-
-      printable.innerHTML = `
-        <div class="print-header" style="border-bottom-color:${C};">
-          <div class="print-logo-box">
-            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
-            <div>
-              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
-              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
-              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
-              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
-            </div>
-          </div>
-          <div class="print-company-info">
-            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
-            <div>Mã Đơn: <strong>${order.code}</strong></div>
-            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
-            <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
-          <div>
-            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
-            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
-            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
-          </div>
-          <div>
-            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
-            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
-            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
-          </div>
-        </div>
-
-        <table class="print-table">
-          <thead>
-            <tr>
-              <th style="width:35px; text-align:center;">STT</th>
-              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
-              <th style="width:90px; text-align:center;">Số Lượng</th>
-              <th style="width:70px; text-align:center;">ĐVT</th>
-              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(order.items || []).map((it, idx) => `
-              <tr>
-                <td style="text-align:center;">${idx + 1}</td>
-                <td>
-                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
-                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
-                </td>
-                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
-                <td style="text-align:center;">${it.unit || 'bộ'}</td>
-                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
-          <div style="font-size:9.5pt; color:#9a3412;">
-            <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
-            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
-          </div>
-          <div style="text-align:right; font-size:10pt;">
-            ${order.shipping_fee > 0 ? `
-              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
-                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
-                  (${order.shipping_payer === 'SHOP' 
-                    ? 'Tia Chớp thanh toán / Freeship' 
-                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
-                </span>
-              </div>
-            ` : ''}
-            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
-              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
-            </div>
-          </div>
-        </div>
-
-        <div class="print-signatures" style="margin-top:24px;">
-          <div class="sig-col">
-            <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
-          </div>
-          <div class="sig-col">
-            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
-          </div>
-          <div class="sig-col">
-            <strong>NGƯỜI NHẬN HÀNG</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
-          </div>
-        </div>
-      `;
-
-      window.print();
-    } catch (err) {
-      alert('Lỗi in phiếu giao hàng: ' + err.message);
-    }
   },
 
   printJobTicket(orderId) {
     const order = this.state.orders.find(o => o.id === orderId);
     if (!order) return;
 
+    const S = (window.Admin && Admin.settings) || {};
+    const C = S.primary_color || '#0284c7';
     const printable = document.getElementById('printable-area');
     printable.innerHTML = `
-      <div class="print-header">
+      <div class="print-header" style="border-bottom-color:${C};">
         <div class="print-logo-box">
-          <img src="/assets/logo.png" style="height:50px;" alt="In Tia Chớp">
+          <img src="/assets/logo.png" alt="In Tia Chớp" onerror="this.style.display='none'">
           <div>
-            <h2 style="font-size:15pt; color:#0284c7; margin:0;">LỆNH IN & GIA CÔNG XƯỞNG</h2>
-            <div style="font-size:9pt; color:#555;">(PHIẾU JOB TICKET ĐIỀU PHỐI GIA CÔNG)</div>
+            <h2 style="color:${C};">LỆNH SẢN XUẤT &amp; GIA CÔNG XƯỞNG</h2>
+            <div style="font-size:8.8pt; color:#475569; font-weight:700;">(JOB TICKET ĐIỀU PHỐI GIA CÔNG IN ẤN)</div>
+            <div style="font-size:8.5pt; color:#64748b;">Công ty TNHH TM DV In Tia Chớp • Hotline: ${S.company_hotline || ''}</div>
           </div>
         </div>
         <div class="print-company-info">
+          <div style="font-size:13pt; font-weight:800; color:${C}; text-transform:uppercase; margin-bottom:2px;">JOB TICKET</div>
           <div>Mã Đơn: <strong>${order.code}</strong></div>
-          <div>Ngày Đặt: ${new Date(order.created_at).toLocaleDateString('vi-VN')}</div>
-          <div><strong>HẠN GIAO XƯỞNG: ${order.delivery_deadline || 'Hỏa tốc'}</strong></div>
+          <div>Ngày Đặt: <strong>${new Date(order.created_at).toLocaleDateString('vi-VN')}</strong></div>
+          <div>Hạn Giao: <strong style="color:#dc2626;">${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'HỎA TỐC'}</strong></div>
         </div>
+      </div>
+
+      <div class="print-customer-box" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div><strong>Khách hàng:</strong> <span style="font-weight:700;">${order.customer_name}</span></div>
+        <div><strong>Điều phối tạo đơn:</strong> ${order.created_by || 'Dương Trần'}</div>
       </div>
 
       <table class="print-table">
         <thead>
           <tr>
-            <th style="width:35px; text-align:center;">STT</th>
-            <th>Tên Ấn Phẩm & Quy Cách Kỹ Thuật</th>
+            <th style="width:36px; text-align:center;">STT</th>
+            <th>Tên Ấn Phẩm &amp; Quy Cách Kỹ Thuật Xưởng</th>
             <th style="width:70px; text-align:center;">Số Lượng</th>
-            <th style="width:60px; text-align:center;">ĐVT</th>
+            <th style="width:50px; text-align:center;">ĐVT</th>
             <th style="width:130px;">Xưởng Gia Công</th>
-            <th>File Thiết Kế & Ghi Chú</th>
+            <th>File Thiết Kế &amp; Lưu Ý</th>
           </tr>
         </thead>
         <tbody>
@@ -2956,34 +2729,38 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <tr>
               <td style="text-align:center;">${idx + 1}</td>
               <td>
-                <strong style="font-size:11pt;">${it.item_name}</strong>
-                <div style="font-size:9.5pt; color:#333; margin-top:4px;">Quy cách: ${it.specs || 'In chuẩn'}</div>
-                ${it.imposition_info ? `<div style="font-size:9pt; color:#0284c7;">Bình bài: ${it.imposition_info}</div>` : ''}
+                <strong style="font-size:9.5pt; color:#0f172a;">${it.item_name}</strong>
+                <div style="font-size:8.8pt; color:#334155; margin-top:2px;">Quy cách: ${it.specs || 'In chuẩn'}</div>
+                ${it.imposition_info ? `<div style="font-size:8.8pt; color:#0284c7; font-weight:600; margin-top:2px;">📐 Bình bài: ${it.imposition_info}</div>` : ''}
               </td>
-              <td style="text-align:center; font-weight:bold; font-size:11pt;">${it.quantity}</td>
+              <td style="text-align:center; font-weight:700; font-size:10pt;">${this.formatNumber(it.quantity)}</td>
               <td style="text-align:center;">${it.unit}</td>
-              <td><strong>${it.supplier_name || 'Xưởng đối tác'}</strong></td>
+              <td><strong style="color:#0f172a;">${it.supplier_name || 'Xưởng gia công'}</strong></td>
               <td>
-                ${it.file_url ? `<div>Link file: <strong>${it.file_url}</strong></div>` : '<div>File đính kèm qua Zalo/Drive</div>'}
+                ${it.file_url ? `<div style="word-break:break-all;">Link file: <strong>${it.file_url}</strong></div>` : '<div>File gửi qua Zalo/Drive xưởng</div>'}
               </td>
             </tr>
           `).join('')}
         </tbody>
       </table>
 
-      <div style="margin-top:20px; border:1px solid #ccc; padding:10px; font-size:9.5pt;">
-        <strong>Yêu cầu chất lượng từ Tia Chớp:</strong>
-        ${((window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '').split('\n').filter(Boolean).map((l, i) => `<div>${i + 1}. ${l}</div>`).join('')}
+      <div class="print-terms">
+        <div style="font-weight:700; color:#0f172a; margin-bottom:3px;">Yêu cầu kỹ thuật &amp; Chất lượng từ In Tia Chớp:</div>
+        ${((window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '').split('\n').filter(Boolean).map((l, i) => `<div>• ${l}</div>`).join('')}
       </div>
 
       <div class="print-signatures">
         <div class="sig-col">
           <strong>ĐIỀU PHỐI SẢN XUẤT</strong>
-          <div style="font-size:9pt; color:#777; margin-top:50px;">Dương Trân</div>
+          <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Giao file)</div>
+          <div class="sig-space"></div>
+          <div style="font-weight:700; color:#0f172a;">${order.created_by || 'Dương Trần'}</div>
         </div>
         <div class="sig-col">
           <strong>XÁC NHẬN TỪ XƯỞNG</strong>
-          <div style="font-size:9pt; color:#777; margin-top:50px;">(Ký nhận lệnh in)</div>
+          <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký nhận lệnh in &amp; Cam kết tiến độ)</div>
+          <div class="sig-space"></div>
+          <div style="color:#94a3b8;">........................................</div>
         </div>
       </div>
     `;
@@ -3011,48 +2788,50 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       const recipientPhone = order.recipient_phone || order.contact_phone || order.customer_phone || '';
       const deliveryAddress = order.shipping_address || order.customer_full_address || 'Nhận tại văn phòng';
       const shippingMethod = order.shipping_method || 'Giao hàng';
-      const trackingCode = order.tracking_code ? ` - Vận đơn / BKS: <strong>${order.tracking_code}</strong>` : '';
+      const trackingCode = order.tracking_code ? ` - Vận đơn: <strong>${order.tracking_code}</strong>` : '';
 
       printable.innerHTML = `
         <div class="print-header" style="border-bottom-color:${C};">
           <div class="print-logo-box">
-            <img src="/assets/logo.png" style="height:55px;" alt="In Tia Chớp">
+            <img src="/assets/logo.png" alt="In Tia Chớp" onerror="this.style.display='none'">
             <div>
-              <h2 style="font-size:16pt; color:${C}; margin:0;">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
-              <div style="font-size:9pt; color:#111; font-weight:700;">${S.company_slogan || ''}</div>
-              <div style="font-size:9pt; color:#555;">Hotline giao nhận: ${S.company_hotline || '0903 000 000'} • Email: ${S.company_email || ''}</div>
-              ${S.company_address ? `<div style="font-size:9pt; color:#555;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
+              <h2 style="color:${C};">${S.company_name || 'CÔNG TY IN TIA CHỚP'}</h2>
+              <div style="font-size:8.8pt; color:#1e293b; font-weight:700;">${S.company_slogan || 'Dịch Vụ & Thương Mại In Ấn Chuyên Nghiệp'}</div>
+              <div style="font-size:8.5pt; color:#475569;">Hotline giao nhận: <strong>${S.company_hotline || '0917 667 937'}</strong> • Email: ${S.company_email || ''}</div>
+              ${S.company_address ? `<div style="font-size:8.5pt; color:#475569;">Địa chỉ xuất kho: ${S.company_address}</div>` : ''}
             </div>
           </div>
           <div class="print-company-info">
-            <div style="font-size:14pt; font-weight:bold; color:${C};">PHIẾU GIAO HÀNG (DELIVERY SLIP)</div>
+            <div style="font-size:13pt; font-weight:800; color:${C}; text-transform:uppercase; margin-bottom:2px;">PHIẾU GIAO HÀNG</div>
             <div>Mã Đơn: <strong>${order.code}</strong></div>
-            <div>Ngày Giao: ${new Date().toLocaleDateString('vi-VN')}</div>
+            <div>Ngày Giao: <strong>${new Date().toLocaleDateString('vi-VN')}</strong></div>
             <div>Hình Thức: <strong>${shippingMethod}</strong>${trackingCode}</div>
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-bottom:14px; background:#f8fafc; padding:12px; border:1px solid #e2e8f0; font-size:10pt;">
-          <div>
-            <div><strong>Người nhận hàng:</strong> ${recipientName}</div>
-            <div><strong>Điện thoại:</strong> <span style="font-size:11pt; font-weight:bold; color:#0284c7;">${recipientPhone}</span></div>
-            <div><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
-          </div>
-          <div>
-            <div><strong>Khách hàng / Công ty:</strong> ${order.customer_name}</div>
-            <div><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
-            ${order.delivery_notes ? `<div style="color:#c00; font-weight:600;"><strong>Dặn dò shipper:</strong> ${order.delivery_notes}</div>` : ''}
+        <div class="print-customer-box">
+          <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:16px;">
+            <div>
+              <div><strong>Người nhận hàng:</strong> <span style="font-size:10pt; font-weight:700; color:#0f172a;">${recipientName}</span></div>
+              <div style="margin-top:2px;"><strong>Điện thoại:</strong> <span style="font-size:10.5pt; font-weight:800; color:${C};">${recipientPhone}</span></div>
+              <div style="margin-top:2px;"><strong>Địa chỉ giao:</strong> ${deliveryAddress}</div>
+            </div>
+            <div>
+              <div><strong>Khách hàng / Đơn vị:</strong> ${order.customer_name}</div>
+              <div style="margin-top:2px;"><strong>Hạn giao / Hẹn khách:</strong> ${order.delivery_deadline ? new Date(order.delivery_deadline).toLocaleDateString('vi-VN') : 'Trong ngày'}</div>
+              ${order.delivery_notes ? `<div style="color:#b91c1c; font-weight:700; margin-top:2px;">Lưu ý shipper: ${order.delivery_notes}</div>` : ''}
+            </div>
           </div>
         </div>
 
         <table class="print-table">
           <thead>
             <tr>
-              <th style="width:35px; text-align:center;">STT</th>
-              <th>Tên Ấn Phẩm Bàn Giao & Quy Cách</th>
-              <th style="width:90px; text-align:center;">Số Lượng</th>
-              <th style="width:70px; text-align:center;">ĐVT</th>
-              <th style="width:180px; text-align:center;">Tình Trạng Hàng Khi Bàn Giao</th>
+              <th style="width:36px; text-align:center;">STT</th>
+              <th>Tên Ấn Phẩm Bàn Giao &amp; Quy Cách</th>
+              <th style="width:75px; text-align:center;">Số Lượng</th>
+              <th style="width:55px; text-align:center;">ĐVT</th>
+              <th style="width:160px; text-align:center;">Tình Trạng Hàng</th>
             </tr>
           </thead>
           <tbody>
@@ -3060,50 +2839,54 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               <tr>
                 <td style="text-align:center;">${idx + 1}</td>
                 <td>
-                  <strong style="font-size:10.5pt;">${it.item_name}</strong>
-                  <div style="font-size:9pt; color:#555;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
+                  <strong style="font-size:9.5pt; color:#0f172a;">${it.item_name}</strong>
+                  <div style="font-size:8.8pt; color:#475569; margin-top:2px;">${this.cleanSpecsForCustomer(it.specs) || it.specs || 'Thành phẩm đóng gói cẩn thận'}</div>
                 </td>
-                <td style="text-align:center; font-weight:bold; font-size:11pt;">${this.formatNumber(it.quantity)}</td>
+                <td style="text-align:center; font-weight:700; font-size:10pt;">${this.formatNumber(it.quantity)}</td>
                 <td style="text-align:center;">${it.unit || 'bộ'}</td>
-                <td style="text-align:center; color:#555; font-size:9pt;">[  ] Đầy đủ, nguyên vẹn</td>
+                <td style="text-align:center; color:#334155; font-size:8.8pt;">[ &nbsp; ] Đầy đủ, nguyên vẹn</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:12px; border:1px solid #fed7aa; border-radius:4px;">
-          <div style="font-size:9.5pt; color:#9a3412;">
+        <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:flex-start; background:#fff7ed; padding:10px 14px; border:1px solid #fed7aa; border-radius:6px; page-break-inside:avoid;">
+          <div style="font-size:8.8pt; color:#9a3412; line-height:1.45;">
             <div>• Quý khách vui lòng kiểm tra kỹ số lượng và tình trạng ấn phẩm trước khi ký nhận.</div>
-            <div>• Mọi thắc mắc về đơn hàng xin vui lòng gọi hotline <strong>${S.company_hotline || '0903 000 000'}</strong> để được hỗ trợ tức thì.</div>
+            <div>• Mọi thắc mắc xin vui lòng gọi hotline <strong>${S.company_hotline || '0917 667 937'}</strong> để được hỗ trợ tức thì.</div>
           </div>
-          <div style="text-align:right; font-size:10pt;">
+          <div style="text-align:right; font-size:9.5pt; flex-shrink:0; padding-left:16px;">
             ${order.shipping_fee > 0 ? `
-              <div>Cước phí vận chuyển: <strong>${this.formatCurrency(order.shipping_fee)}</strong> 
-                <span style="font-size:9pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? 'green' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
+              <div style="white-space:nowrap;">Cước phí vận chuyển: <strong>${this.formatNumber(order.shipping_fee)} đ</strong> 
+                <span style="font-size:8.5pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? '#16a34a' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
                   (${order.shipping_payer === 'SHOP' 
-                    ? 'Tia Chớp thanh toán / Freeship' 
+                    ? 'Tia Chớp hỗ trợ / Freeship' 
                     : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
                 </span>
               </div>
             ` : ''}
-            <div style="font-size:12pt; font-weight:bold; color:#c00; margin-top:4px;">
-              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatCurrency(order.remaining_amount) : '0 đ (Đã thanh toán đủ)'}
+            <div style="font-size:11pt; font-weight:800; color:#b91c1c; margin-top:3px; white-space:nowrap;">
+              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatNumber(order.remaining_amount) + ' đ' : '0 đ (Đã thanh toán đủ)'}
             </div>
           </div>
         </div>
 
-        <div class="print-signatures" style="margin-top:24px;">
+        <div class="print-signatures">
           <div class="sig-col">
             <strong>NGƯỜI GIAO HÀNG / TÀI XẾ</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Ghi rõ họ tên)</div>
+            <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Ghi rõ họ tên)</div>
+            <div class="sig-space"></div>
           </div>
           <div class="sig-col">
-            <strong>NGƯỜI ĐIỀU PHỐI XUẤT KHO</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">${order.created_by || 'Dương Trân'}</div>
+            <strong>ĐIỀU PHỐI XUẤT KHO</strong>
+            <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Xác nhận xuất kho)</div>
+            <div class="sig-space"></div>
+            <div style="font-weight:700; color:#0f172a;">${order.created_by || 'Dương Trần'}</div>
           </div>
           <div class="sig-col">
             <strong>NGƯỜI NHẬN HÀNG</strong>
-            <div style="font-size:9pt; color:#777; margin-top:55px;">(Ký & Xác nhận đã nhận đủ hàng)</div>
+            <div style="font-size:8.5pt; color:#64748b; margin-top:2px;">(Ký &amp; Xác nhận đã nhận đủ hàng)</div>
+            <div class="sig-space"></div>
           </div>
         </div>
       `;

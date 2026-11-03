@@ -231,8 +231,13 @@ router.get('/suppliers/jobs', (req, res) => {
     }
 
     if (status && status !== 'ALL') {
-      query += ` AND oi.status = ?`;
-      params.push(status);
+      if (status === 'PENDING') {
+        // Lệnh chờ gửi xưởng chỉ thuộc những đơn hàng chưa xong / chưa giao / chưa hủy
+        query += ` AND oi.status = 'PENDING' AND o.status NOT IN ('PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED', 'CANCELLED')`;
+      } else {
+        query += ` AND oi.status = ?`;
+        params.push(status);
+      }
     }
 
     query += ` ORDER BY o.created_at DESC, oi.id DESC`;
@@ -534,7 +539,7 @@ router.post('/orders', (req, res) => {
       id, code, type, customer_id, contact_id || null, initialStatus, delivery_deadline || null, shipping_address || '',
       parsedShippingFee, payer, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost, gross_profit,
-      parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trân', req.user?.id || null
+      parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trần', req.user?.id || null
     );
 
     // Lưu các line items
@@ -654,6 +659,19 @@ router.put('/orders/:id', (req, res) => {
       req.params.id
     );
 
+    // Lưu lại trạng thái của các items cũ để bảo toàn nếu item đó đã gửi xưởng hoặc đã xong
+    const oldItems = db.prepare('SELECT id, item_name, supplier_id, status FROM order_items WHERE order_id = ?').all(req.params.id);
+    const oldStatusMap = new Map();
+    oldItems.forEach(it => {
+      if (it.id) oldStatusMap.set(it.id, it.status);
+      // Map theo key (tên + xưởng) để fallback khi client gửi item mới hoặc regenerate id
+      const key = `${it.item_name}__${it.supplier_id || ''}`;
+      if (!oldStatusMap.has(key)) oldStatusMap.set(key, it.status);
+    });
+
+    // Nếu đơn hàng đã ở trạng thái đã giao / hoàn thành, items mặc định phải là DONE
+    const isCompletedOrDelivered = ['COMPLETED', 'DELIVERED', 'PRODUCED'].includes(order.status);
+
     // Xóa items cũ và insert lại
     db.prepare('DELETE FROM order_items WHERE order_id = ?').run(req.params.id);
 
@@ -672,11 +690,26 @@ router.put('/orders/:id', (req, res) => {
       const tPrice = uPrice * q;
       const profit = tPrice - tCost;
 
+      // Xác định trạng thái của item:
+      // 1. Nếu item có status gửi lên hợp lệ ('PRINTING', 'DONE') thì giữ nguyên
+      // 2. Nếu order đã PRODUCED / DELIVERED / COMPLETED thì tự động là 'DONE'
+      // 3. Nếu khớp với item cũ đã PRINTING / DONE thì giữ trạng thái cũ
+      // 4. Mặc định là 'PENDING'
+      let itemStatus = it.status;
+      if (!itemStatus || !['PENDING', 'PRINTING', 'DONE'].includes(itemStatus)) {
+        if (isCompletedOrDelivered) {
+          itemStatus = 'DONE';
+        } else {
+          const matchedOldStatus = (it.id && oldStatusMap.get(it.id)) || oldStatusMap.get(`${it.item_name || ''}__${it.supplier_id || ''}`);
+          itemStatus = matchedOldStatus || 'PENDING';
+        }
+      }
+
       insertItem.run(
         generateId('item'), req.params.id, it.item_name || 'Ấn phẩm in', it.size || '', q, it.unit || 'bộ',
         it.paper_gsm || '', it.specs || '', it.imposition_info || '',
         it.supplier_id || null, it.file_url || '',
-        uCost, tCost, uPrice, tPrice, profit, 'PENDING'
+        uCost, tCost, uPrice, tPrice, profit, itemStatus
       );
     });
 
@@ -691,6 +724,16 @@ router.patch('/orders/:id/status', (req, res) => {
   try {
     const { status } = req.body;
     db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
+
+    // Nếu đơn hàng chuyển sang Xưởng xong, Đang giao, Đã giao hoặc Hoàn thành, tự động cập nhật các lệnh xưởng chưa xong thành 'DONE'
+    if (['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(status)) {
+      db.prepare("UPDATE order_items SET status = 'DONE' WHERE order_id = ? AND status != 'DONE'").run(req.params.id);
+    }
+    // Nếu đơn hàng bị HỦY, có thể hủy các lệnh PENDING
+    else if (status === 'CANCELLED') {
+      db.prepare("UPDATE order_items SET status = 'CANCELLED' WHERE order_id = ? AND status = 'PENDING'").run(req.params.id);
+    }
+
     res.json({ success: true, status });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -775,6 +818,11 @@ router.patch('/orders/:id/delivery', (req, res) => {
       newGrossProfit,
       req.params.id
     );
+
+    // Đồng bộ trạng thái các hạng mục sản xuất nếu đơn đã làm xong hoặc giao hàng
+    if (['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(newStatus)) {
+      db.prepare("UPDATE order_items SET status = 'DONE' WHERE order_id = ? AND status != 'DONE'").run(req.params.id);
+    }
 
     res.json({ success: true, id: req.params.id, status: newStatus, shipping_fee: parsedFee, shipping_payer: newPayer });
   } catch (err) {

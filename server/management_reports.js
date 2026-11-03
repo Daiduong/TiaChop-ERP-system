@@ -589,7 +589,7 @@ router.get('/print', (req, res) => {
           </div>
           <div>
             <strong>GIÁM ĐỐC DUYỆT</strong>
-            <div style="font-size: 8.5pt; color: #64748b; margin-top: 50px;">Dương Trân</div>
+            <div style="font-size: 8.5pt; color: #64748b; margin-top: 50px;">Dương Trần</div>
           </div>
         </div>
       </body>

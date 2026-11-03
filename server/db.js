@@ -84,7 +84,7 @@ function initDatabase() {
       remaining_amount REAL DEFAULT 0,
       payment_status TEXT DEFAULT 'UNPAID', -- UNPAID, PARTIAL, PAID
       notes TEXT,
-      created_by TEXT DEFAULT 'Dương Trân',
+      created_by TEXT DEFAULT 'Dương Trần',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id)
@@ -372,7 +372,7 @@ function seedInitialData() {
     'dh_01', 'DH1773288121173', 'ORDER', 'kh_texas', 'ct_01', 'IN_PRODUCTION',
     '2026-10-16', 'Texas Chicken - Chi nhánh Hai Bà Trưng, Q1, HCM',
     8, 256000, 160000, 3200000, 1950000, 1250000,
-    1600000, 1856000, 'PARTIAL', 'Khách hẹn giao trước 15h ngày 16/10. Kèm hoá đơn VAT 8%.', 'Dương Trân'
+    1600000, 1856000, 'PARTIAL', 'Khách hẹn giao trước 15h ngày 16/10. Kèm hoá đơn VAT 8%.', 'Dương Trần'
   );
 
   insertItem.run(
@@ -398,7 +398,7 @@ function seedInitialData() {
     'dh_02', 'BH_202613', 'ORDER', 'kh_itd', 'ct_05', 'COMPLETED',
     '2026-10-09', 'Tòa nhà ITD, Khu Công Nghệ Cao, TP. Thủ Đức',
     10, 480000, 0, 4800000, 2900000, 1900000,
-    4800000, 0, 'PAID', 'Đã giao hàng và xuất hóa đơn VAT điện tử ngày 09/10.', 'Dương Trân'
+    4800000, 0, 'PAID', 'Đã giao hàng và xuất hóa đơn VAT điện tử ngày 09/10.', 'Dương Trần'
   );
 
   insertItem.run(
@@ -420,7 +420,7 @@ function seedInitialData() {
     'dh_03', 'BG_202645', 'QUOTE', 'kh_ruby', 'ct_08', 'QUOTE_SENT',
     '2026-10-18', 'Trường Mầm Non Ruby School, Bình Thạnh',
     0, 0, 95000, 1805000, 1100000, 705000,
-    0, 1805000, 'UNPAID', 'Gửi báo giá in sổ bé ngoan và thẻ đeo phụ huynh. Đã áp chiết khấu 5%.', 'Dương Trân'
+    0, 1805000, 'UNPAID', 'Gửi báo giá in sổ bé ngoan và thẻ đeo phụ huynh. Đã áp chiết khấu 5%.', 'Dương Trần'
   );
 
   insertItem.run(

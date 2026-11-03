@@ -491,8 +491,12 @@ router.get('/supplier-jobs/export', async (req, res) => {
       params.push(supplier_id);
     }
     if (status && status !== 'ALL') {
-      query += ` AND oi.status = ?`;
-      params.push(status);
+      if (status === 'PENDING') {
+        query += ` AND oi.status = 'PENDING' AND o.status NOT IN ('PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED', 'CANCELLED')`;
+      } else {
+        query += ` AND oi.status = ?`;
+        params.push(status);
+      }
     }
     query += ` ORDER BY o.created_at DESC, oi.id DESC`;
 

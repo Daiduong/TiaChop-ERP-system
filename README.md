@@ -10,7 +10,7 @@ Hệ thống **TiaChop ERP** được xây dựng đặc thù cho **Công ty In 
 2. **Chốt Đơn & Tách Lệnh Xưởng (Job Ticket)**: Phân phối từng hạng mục in về đúng xưởng có thế mạnh (Photo Ngọc Minh, In Thành Danh, In Sắc Kim, TTL Copier, In Đại Nam...).
 3. **Quản lý Dòng tiền & Sổ Công Nợ (AR/AP)**: Theo dõi chặt chẽ tiền cọc 50%, công nợ còn lại của các khách hàng lớn (Texas Chicken, ITD Group, Ruby School, VNPT...), nhật ký thu chi ngày và thuế VAT.
 4. **Kiến trúc Phân quyền Tuyển dụng (RBAC)**: Thiết kế sẵn bảo mật:
-   - 👑 **Admin (Dương Trân)**: Toàn quyền quản trị, xem giá vốn, lợi nhuận, sổ quỹ.
+   - 👑 **Admin (Dương Trần)**: Toàn quyền quản trị, xem giá vốn, lợi nhuận, sổ quỹ.
    - 💼 **Sales (Kinh doanh)**: Ẩn hoàn toàn giá vốn xưởng (tiền làm) và lợi nhuận gộp để bảo mật biên lợi nhuận của công ty khi tuyển dụng nhân sự mới.
    - 📊 **Kế toán**: Quản lý chuyên sâu thu chi, cọc tiền hàng, công nợ và hóa đơn VAT.
    - 🏭 **Điều phối gia công**: Quản lý quy cách kỹ thuật, file in và theo dõi tiến độ hoàn thành từ các xưởng.

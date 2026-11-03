@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS = {
   job_ticket_requirements: 'Canh đúng màu theo file in, kiểm tra kỹ chính tả trước khi chạy số lượng.\nCắt xén chuẩn kích thước, đóng gói bằng màng co/hộp chống va đập.',
   sign_customer_label: 'ĐẠI DIỆN KHÁCH HÀNG',
   sign_company_label: 'ĐẠI DIỆN IN TIA CHỚP',
-  sign_company_name: 'Dương Trân',
+  sign_company_name: 'Dương Trần',
   primary_color: '#0284c7'
 };
 
@@ -61,7 +61,7 @@ const DEFAULT_SETTINGS = {
   if (count === 0) {
     db.prepare(`INSERT INTO users (id, username, full_name, email, phone, role, password_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run('u_admin', 'admin', 'Dương Trân', 'contact@tiachop.vn', '0903000000', 'ADMIN', hashPassword('admin123'));
+      .run('u_admin', 'admin', 'Dương Trần', 'contact@tiachop.vn', '0903000000', 'ADMIN', hashPassword('admin123'));
     console.log('👤 Đã tạo tài khoản admin mặc định: admin / admin123');
   }
 })();
