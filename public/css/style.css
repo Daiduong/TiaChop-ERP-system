@@ -600,6 +600,91 @@ body {
   background-color: var(--bg-card-hover);
 }
 
+/* Định dạng riêng cho bảng Quản lý đơn hàng (#orders-main-table) */
+#orders-main-table {
+  min-width: 1100px;
+}
+
+#orders-main-table .col-order-code {
+  width: 120px;
+  white-space: nowrap;
+}
+
+#orders-main-table .col-order-type {
+  width: 95px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+#orders-main-table .col-customer {
+  max-width: 210px;
+  min-width: 170px;
+  white-space: normal !important;
+}
+
+#orders-main-table .cust-name-line {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+#orders-main-table .cust-sub-line {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+#orders-main-table .cust-code-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--primary-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+#orders-main-table .col-specs {
+  max-width: 260px;
+  min-width: 200px;
+  white-space: normal !important;
+}
+
+#orders-main-table .col-specs .item-row {
+  margin-bottom: 5px;
+  line-height: 1.35;
+}
+
+#orders-main-table .col-specs .item-row:last-child {
+  margin-bottom: 0;
+}
+
+#orders-main-table .col-finance {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#orders-main-table .col-status {
+  width: 140px;
+}
+
+#orders-main-table .col-actions {
+  white-space: nowrap;
+  width: 180px;
+}
+
 /* Status Badges */
 .badge {
   display: inline-flex;

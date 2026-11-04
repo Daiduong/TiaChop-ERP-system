@@ -906,6 +906,152 @@ router.get('/pricing/configs', (req, res) => {
   }
 });
 
+// ==========================================
+// QUẢN LÝ SẢN PHẨM MẪU (PRODUCT PRESETS)
+// ==========================================
+router.get('/presets', (req, res) => {
+  try {
+    const { group, q } = req.query;
+    let sql = 'SELECT * FROM product_presets WHERE is_active = 1';
+    const params = [];
+    if (group) {
+      sql += ' AND group_type = ?';
+      params.push(group);
+    }
+    if (q) {
+      sql += ' AND (name LIKE ? OR code LIKE ? OR description LIKE ?)';
+      const term = `%${q}%`;
+      params.push(term, term, term);
+    }
+    sql += ' ORDER BY group_type ASC, sort_order ASC, name ASC';
+    const rows = db.prepare(sql).all(...params);
+    const result = rows.map(r => {
+      let cfg = {};
+      try {
+        cfg = r.config_json ? JSON.parse(r.config_json) : {};
+      } catch (e) {
+        cfg = {};
+      }
+      return {
+        ...r,
+        config: cfg
+      };
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/presets', (req, res) => {
+  try {
+    const {
+      group_type, code, name, description, unit,
+      width, height, quantity, pcs_per_unit,
+      supplier_id, config
+    } = req.body || {};
+
+    if (!group_type || !name) {
+      return res.status(400).json({ error: 'Vui lòng cung cấp nhóm công nghệ in và tên sản phẩm mẫu' });
+    }
+
+    const id = generateId('preset');
+    const finalCode = (code || `SPM_${Date.now().toString().slice(-6)}`).trim().toUpperCase();
+    const configStr = typeof config === 'object' ? JSON.stringify(config) : (config || '{}');
+
+    db.prepare(`
+      INSERT INTO product_presets (
+        id, group_type, code, name, description, unit,
+        width, height, quantity, pcs_per_unit, supplier_id, config_json, is_active, sort_order
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 99
+      )
+    `).run(
+      id,
+      group_type,
+      finalCode,
+      name.trim(),
+      description || '',
+      unit || 'cái',
+      Number(width) || 0,
+      Number(height) || 0,
+      parseInt(quantity) || 1,
+      parseInt(pcs_per_unit) || 1,
+      supplier_id || null,
+      configStr
+    );
+
+    const created = db.prepare('SELECT * FROM product_presets WHERE id = ?').get(id);
+    res.json({ success: true, preset: created });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/presets/:id', (req, res) => {
+  try {
+    const {
+      name, description, unit, width, height, quantity,
+      pcs_per_unit, supplier_id, config, is_active, sort_order
+    } = req.body || {};
+
+    const existing = db.prepare('SELECT * FROM product_presets WHERE id = ?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy sản phẩm mẫu' });
+    }
+
+    const configStr = config !== undefined ? (typeof config === 'object' ? JSON.stringify(config) : config) : existing.config_json;
+
+    db.prepare(`
+      UPDATE product_presets SET
+        name = COALESCE(?, name),
+        description = COALESCE(?, description),
+        unit = COALESCE(?, unit),
+        width = COALESCE(?, width),
+        height = COALESCE(?, height),
+        quantity = COALESCE(?, quantity),
+        pcs_per_unit = COALESCE(?, pcs_per_unit),
+        supplier_id = COALESCE(?, supplier_id),
+        config_json = COALESCE(?, config_json),
+        is_active = COALESCE(?, is_active),
+        sort_order = COALESCE(?, sort_order),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      name !== undefined ? name.trim() : null,
+      description !== undefined ? description : null,
+      unit !== undefined ? unit : null,
+      width !== undefined ? Number(width) : null,
+      height !== undefined ? Number(height) : null,
+      quantity !== undefined ? parseInt(quantity) : null,
+      pcs_per_unit !== undefined ? parseInt(pcs_per_unit) : null,
+      supplier_id !== undefined ? supplier_id : null,
+      configStr,
+      is_active !== undefined ? parseInt(is_active) : null,
+      sort_order !== undefined ? parseInt(sort_order) : null,
+      req.params.id
+    );
+
+    const updated = db.prepare('SELECT * FROM product_presets WHERE id = ?').get(req.params.id);
+    res.json({ success: true, preset: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/presets/:id', (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM product_presets WHERE id = ?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy sản phẩm mẫu' });
+    }
+    db.prepare('DELETE FROM product_presets WHERE id = ?').run(req.params.id);
+    res.json({ success: true, message: 'Đã xóa sản phẩm mẫu thành công' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/pricing/calculate', (req, res) => {
   try {
     res.json(calculatePrice(db, req.body || {}));

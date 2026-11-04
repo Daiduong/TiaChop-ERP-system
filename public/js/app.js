@@ -532,6 +532,168 @@ const App = {
 
     this.setPricingGroup(this.state.pricingGroup);
     this.updateDocRuotPriceTag();
+    this.loadPresetsFromApi();
+  },
+
+  async loadPresetsFromApi() {
+    try {
+      const res = await fetch('/api/presets');
+      if (!res.ok) return;
+      const apiPresets = await res.json();
+      if (!apiPresets || !apiPresets.length) return;
+
+      const grouped = { DIGITAL: [], OFFSET: [], LARGE_FORMAT: [], DOCUMENT_SPIRAL: [] };
+      apiPresets.forEach(p => {
+        if (!grouped[p.group_type]) grouped[p.group_type] = [];
+        const cfg = p.config || {};
+        grouped[p.group_type].push({
+          key: p.code,
+          name: p.name,
+          w: p.width,
+          h: p.height,
+          qty: p.quantity,
+          unit: p.unit,
+          pcs: p.pcs_per_unit || 1,
+          paper: cfg.paper,
+          sides: cfg.printSides,
+          lam: cfg.lamination,
+          fin: cfg.finishing || [],
+          table: cfg.table,
+          variants: cfg.variants || (cfg.table ? [cfg.def || 'C150'] : []),
+          def: cfg.def,
+          material: cfg.material,
+          size: cfg.size,
+          pages: cfg.pages,
+          ruotPrint: cfg.ruotPrint,
+          bindingPackage: cfg.bindingPackage,
+          frontPrint: cfg.frontPrint,
+          backPrint: cfg.backPrint,
+          custom: false
+        });
+      });
+
+      ['DIGITAL', 'OFFSET', 'LARGE_FORMAT', 'DOCUMENT_SPIRAL'].forEach(g => {
+        if (grouped[g] && grouped[g].length > 0) {
+          grouped[g].push({ key: 'CUSTOM', name: '⚡ Tùy chỉnh tự do kích thước & quy cách', custom: true });
+          this.pricingPresets[g] = grouped[g];
+        }
+      });
+
+      // Render lại danh sách preset cho nhóm hiện tại
+      const group = this.state.pricingGroup;
+      const presets = this.pricingPresets[group] || [];
+      const sel = document.getElementById('calc-preset');
+      if (sel) {
+        const curVal = sel.value;
+        sel.innerHTML = presets.map(p => `<option value="${p.key}">${p.name}</option>`).join('');
+        if (presets.some(p => p.key === curVal)) {
+          sel.value = curVal;
+        } else if (presets.length) {
+          this.applyPricingPreset(presets[0]);
+          this.triggerPricingCalculation();
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi khi nạp presets động từ API:', e);
+    }
+  },
+
+  openSaveAsPresetModal() {
+    const g = this.state.pricingGroup;
+    const w = document.getElementById('calc-width')?.value || '';
+    const h = document.getElementById('calc-height')?.value || '';
+    const defName = `${this.state.pricingProductName || 'Sản phẩm mới'} (${w}x${h}mm)`;
+    
+    document.getElementById('quick-preset-name').value = defName;
+    document.getElementById('quick-preset-code').value = '';
+    document.getElementById('quick-preset-unit').value = this.state.pricingUnit || 'cái';
+    document.getElementById('quick-preset-desc').value = '';
+    document.getElementById('modal-save-as-preset').classList.add('active');
+  },
+
+  async saveCurrentCalculationAsPreset() {
+    const name = document.getElementById('quick-preset-name').value.trim();
+    if (!name) return alert('Vui lòng nhập tên sản phẩm mẫu!');
+
+    const code = document.getElementById('quick-preset-code').value.trim();
+    const unit = document.getElementById('quick-preset-unit').value.trim() || 'cái';
+    const description = document.getElementById('quick-preset-desc').value.trim();
+
+    const g = this.state.pricingGroup;
+    const v = (id) => document.getElementById(id)?.value;
+    const fields = document.querySelector(`.pricing-group-fields[data-group="${g}"]`);
+    const finishing = [...fields.querySelectorAll('input[type="checkbox"][value]:checked')].map(c => c.value);
+
+    const config = {};
+    const width = parseFloat(v('calc-width')) || 0;
+    const height = parseFloat(v('calc-height')) || 0;
+    const quantity = parseInt(v('calc-quantity')) || 1;
+    let pcs_per_unit = 1;
+
+    if (g === 'DIGITAL') {
+      pcs_per_unit = parseInt(v('calc-pcs-per-unit')) || 1;
+      config.sheetSize = v('calc-dig-sheet');
+      config.paper = v('calc-dig-paper');
+      config.printSides = parseInt(v('calc-dig-sides')) || 2;
+      config.lamination = v('calc-dig-lam');
+      config.finishing = finishing;
+    } else if (g === 'OFFSET') {
+      const presetSel = document.getElementById('calc-preset')?.value;
+      const curPreset = (this.pricingPresets.OFFSET || []).find(p => p.key === presetSel);
+      if (curPreset && curPreset.table) {
+        config.table = curPreset.table;
+        config.def = v('calc-off-variant');
+      } else {
+        config.sheetSize = v('calc-off-sheet');
+        config.paperType = v('calc-off-paper');
+        config.gsm = parseFloat(v('calc-off-gsm'));
+        config.colorsFront = parseInt(v('calc-off-cf'));
+        config.colorsBack = parseInt(v('calc-off-cb'));
+        config.lamination = v('calc-off-lam');
+      }
+    } else if (g === 'LARGE_FORMAT') {
+      config.material = v('calc-lf-material');
+      config.finishing = finishing;
+    } else if (g === 'DOCUMENT_SPIRAL') {
+      config.size = v('calc-doc-size') || 'A5';
+      config.pages = parseInt(v('calc-doc-pages')) || 160;
+      config.ruotPrint = v('calc-doc-ruot-print');
+      config.bindingPackage = v('calc-doc-binding-package');
+      config.frontPrint = v('calc-doc-front-print');
+      config.backPrint = v('calc-doc-back-print');
+    }
+
+    const payload = {
+      group_type: g,
+      code,
+      name,
+      description,
+      unit,
+      width,
+      height,
+      quantity,
+      pcs_per_unit,
+      config
+    };
+
+    try {
+      const res = await fetch('/api/presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi lưu mẫu');
+
+      alert('✅ Đã lưu thành công sản phẩm mẫu mới vào hệ thống!');
+      this.closeModals();
+      await this.loadPresetsFromApi();
+      if (window.Admin && window.Admin.loadPresets) {
+        window.Admin.loadPresets();
+      }
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
   },
 
   // Cập nhật tag đơn giá in ruột hiển thị trực quan ngay trên form nhập liệu
@@ -542,7 +704,7 @@ const App = {
     const ruotPrint = (document.getElementById('calc-doc-ruot-print')?.value || '').toLowerCase();
     const isColor = ruotPrint.includes('màu');
     const is2S = ruotPrint.includes('2 mặt');
-    
+
     let priceText = '350 đ/tờ';
     if (!isColor) {
       if (size === 'A5') priceText = is2S ? '200 đ/tờ' : '225 đ/tờ';
@@ -727,7 +889,7 @@ const App = {
       input.size = docSize;
       input.kho_thanh_pham = docSize;
       input.unit = 'cuốn';
-      
+
       const pkg = v('calc-doc-binding-package') || 'HARD_SPIRAL';
       const isHard = pkg.startsWith('HARD');
       const hasGlass = pkg.endsWith('GLASS');
@@ -789,9 +951,9 @@ const App = {
             let val = m.value || '';
             // Ẩn tên xưởng và tên bảng giá xưởng nếu có trong nội dung
             val = val.replace(/(?:bảng giá|xưởng|nhà cung cấp|ncc)\s*(?:in\s+)?(?:thành danh|ngọc minh|sắc kim|ttl copier|đại nam)[^—\–\-\,]*/gi, 'Tiêu chuẩn kỹ thuật')
-                     .replace(/\(tính giá NCC\)/gi, '')
-                     .replace(/\s+/g, ' ')
-                     .trim();
+              .replace(/\(tính giá NCC\)/gi, '')
+              .replace(/\s+/g, ' ')
+              .trim();
             return { ...m, value: val };
           });
 
@@ -953,12 +1115,12 @@ const App = {
     const input = this.collectPricingInput();
     const settings = this.state.settings || (window.Admin && Admin.settings) || {};
     const companyName = settings.company_name || 'IN TIA CHỚP';
-    
+
     // Ưu tiên SĐT của user đang đăng nhập (nhân viên kinh doanh/tư vấn), nếu không có thì lấy hotline công ty
     const currentUserPhone = this.state.currentUser?.phone;
     const currentUserName = this.state.currentUser?.full_name;
     const hotline = currentUserPhone || settings.company_hotline || '0917 667 937';
-    const supportContactText = currentUserPhone 
+    const supportContactText = currentUserPhone
       ? `${currentUserPhone} (${currentUserName || 'Tư vấn viên'})`
       : hotline;
 
@@ -983,8 +1145,8 @@ const App = {
     // Loại bỏ thông tin kỹ thuật xưởng "in 4/4, Khổ ..." khi gửi cho khách
     const cleanSpecs = this.cleanSpecsForCustomer(p.specs);
 
-    const quoteText = 
-`⚡ BÁO GIÁ IN ẤN - ${companyName.toUpperCase()}
+    const quoteText =
+      `⚡ BÁO GIÁ IN ẤN - ${companyName.toUpperCase()}
 ━━━━━━━━━━━━━━━━━━━━━━
 📦 Sản phẩm: ${p.productName}
 📐 Kích thước: ${input.width} × ${input.height} mm
@@ -1091,9 +1253,9 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     try {
       tbody.innerHTML = this.state.orders.map(o => {
         const itemsList = (o.items || []).map(it => `
-          <div style="margin-bottom:4px;">
-            <strong>• ${it.item_name}</strong> (${it.quantity} ${it.unit})
-            <div style="font-size:11px; color:var(--text-dim);">${it.specs || ''}</div>
+          <div class="item-row">
+            <strong>• ${it.item_name}</strong> <span style="color:var(--text-dim); font-size:12px;">(${it.quantity} ${it.unit})</span>
+            ${it.specs ? `<div style="font-size:11px; color:var(--text-muted); padding-left:8px;">${it.specs}</div>` : ''}
           </div>
         `).join('');
 
@@ -1108,55 +1270,57 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
         return `
           <tr>
-            <td>
-              <strong>${o.code}</strong>
+            <td class="col-order-code">
+              <strong style="color:var(--primary-light);">${o.code}</strong>
               <div style="font-size:11px; color:var(--text-dim);">${new Date(o.created_at).toLocaleDateString('vi-VN')}</div>
             </td>
-            <td>
+            <td class="col-order-type">
               <span class="badge ${o.type === 'QUOTE' ? 'badge-quote' : 'badge-confirmed'}">
                 ${o.type === 'QUOTE' ? 'BÁO GIÁ' : 'ĐƠN HÀNG'}
               </span>
             </td>
-            <td>
-              <div style="font-weight:600;">${o.customer_name || ''}</div>
-              <div style="font-size:11.5px; color:var(--text-muted);">
-                ${o.contact_name ? `👤 ${o.contact_name}` : ''} ${o.customer_phone || ''}
+            <td class="col-customer">
+              <div class="cust-name-line" title="${o.customer_name || ''}">${o.customer_name || ''}</div>
+              <div class="cust-sub-line">
+                ${o.customer_code ? `<span class="cust-code-badge">${o.customer_code}</span>` : ''}
+                ${o.contact_name ? `<span>👤 ${o.contact_name}</span>` : ''}
+                ${o.customer_phone ? `<span>📞 ${o.customer_phone}</span>` : ''}
               </div>
             </td>
-            <td style="max-width:220px; white-space:normal;">
+            <td class="col-specs">
               ${itemsList || '<span style="color:var(--text-dim);">Không có chi tiết</span>'}
             </td>
             <td class="col-supplier-info" style="${isSales ? 'display:none;' : ''}">${fileLink}</td>
             <td class="col-supplier-info" style="${isSales ? 'display:none;' : ''}">
               <span style="font-weight:600; color:var(--accent-amber);">${supplierName}</span>
             </td>
-            <td style="font-weight:700; color:var(--primary-light);">
+            <td class="col-finance" style="font-weight:700; color:var(--primary-light);">
               ${this.formatCurrency(o.total_selling)}
               ${o.shipping_fee > 0 ? `
                 <div style="font-size:10px; color:${o.shipping_payer === 'SHOP' ? 'var(--accent-green)' : (o.shipping_payer === 'ADVANCE_COLLECT' ? 'var(--accent-amber)' : 'var(--primary-light)')};">
-                  🚚 Ship: ${o.shipping_payer === 'SHOP' 
-                    ? `Shop trả (${this.formatCurrency(o.shipping_fee)})` 
-                    : (o.shipping_payer === 'ADVANCE_COLLECT' 
-                        ? `Ứng gom thu (+${this.formatCurrency(o.shipping_fee)})` 
-                        : `+${this.formatCurrency(o.shipping_fee)}`)}
+                  🚚 Ship: ${o.shipping_payer === 'SHOP'
+              ? `Shop trả (${this.formatCurrency(o.shipping_fee)})`
+              : (o.shipping_payer === 'ADVANCE_COLLECT'
+                ? `Ứng gom thu (+${this.formatCurrency(o.shipping_fee)})`
+                : `+${this.formatCurrency(o.shipping_fee)}`)}
                 </div>
               ` : ''}
               ${o.vat_rate > 0 ? `<div style="font-size:10px; color:var(--text-dim);">Gồm VAT ${o.vat_rate}%</div>` : ''}
             </td>
-            <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} color:var(--accent-amber); font-weight:600;">
+            <td class="col-cost-profit col-finance" style="${isSales ? 'display:none;' : ''} color:var(--accent-amber); font-weight:600;">
               ${this.formatCurrency(o.total_cost)}
             </td>
-            <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} color:var(--accent-green); font-weight:700;">
+            <td class="col-cost-profit col-finance" style="${isSales ? 'display:none;' : ''} color:var(--accent-green); font-weight:700;">
               ${this.formatCurrency(o.gross_profit)}
             </td>
-            <td>
+            <td class="col-finance">
               <div style="font-size:12px;">
                 ${o.payment_status === 'PAID' ? '<span class="badge badge-paid">Đã TT Đủ</span>' : (o.payment_status === 'PARTIAL' ? '<span class="badge badge-partial">Đã Cọc</span>' : '<span class="badge badge-unpaid">Chưa TT</span>')}
               </div>
               ${o.remaining_amount > 0 ? `<div style="font-size:11px; color:var(--accent-rose); margin-top:2px;">Còn nợ: ${this.formatCurrency(o.remaining_amount)}</div>` : ''}
             </td>
-            <td>
-              <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:11.5px; padding:3px 6px;">
+            <td class="col-status">
+              <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:11.5px; padding:3px 6px; width:100%;">
                 <option value="DRAFT" ${o.status === 'DRAFT' ? 'selected' : ''}>Nháp</option>
                 <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>Đã Gửi Báo Giá</option>
                 <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>Đã Chốt Đơn</option>
@@ -1172,7 +1336,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 </div>
               ` : ''}
             </td>
-            <td>
+            <td class="col-actions">
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 ${o.type === 'QUOTE' ? `
                   <button class="btn btn-accent btn-sm" onclick="App.convertToOrder('${o.id}')" title="Chốt thành đơn hàng">⚡ Chốt</button>
@@ -1190,7 +1354,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           </tr>
         `;
       }).join('');
-    } catch(renderErr) {
+    } catch (renderErr) {
       console.error('[renderOrdersTable] Lỗi khi render HTML:', renderErr);
       tbody.innerHTML = `<tr><td colspan="12" style="text-align:center; padding:30px; color:var(--accent-rose);">Lỗi hiển thị danh sách. Vui lòng tải lại trang.</td></tr>`;
     }
@@ -1360,7 +1524,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     }
     box.style.display = open ? 'block' : 'none';
     if (open) document.getElementById('qct-name').focus();
-    else ['qct-name', 'qct-phone'].forEach(id => document.getElementById(id).value = '');
+    else['qct-name', 'qct-phone'].forEach(id => document.getElementById(id).value = '');
   },
 
   async saveQuickContact() {
@@ -1395,7 +1559,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const open = typeof show === 'boolean' ? show : box.style.display === 'none';
     box.style.display = open ? 'block' : 'none';
     if (open) document.getElementById('qc-name').focus();
-    else ['qc-name', 'qc-phone', 'qc-address'].forEach(id => document.getElementById(id).value = '');
+    else['qc-name', 'qc-phone', 'qc-address'].forEach(id => document.getElementById(id).value = '');
   },
 
   async saveQuickCustomer() {
@@ -1549,7 +1713,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   addShippingOrderItemRow(presetType) {
     let fee = 30000;
     let label = 'Dịch vụ vận chuyển / Giao hàng nội thành';
-    
+
     if (presetType === 'SUBURBAN') {
       fee = 50000;
       label = 'Dịch vụ vận chuyển ngoại thành / cồng kềnh';
@@ -2008,15 +2172,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             const safeSupId = (g.supplier_id || '').replace(/'/g, '');
 
             const rowsHtml = g.items.map(j => {
-              const fileHtml = j.file_url 
+              const fileHtml = j.file_url
                 ? `<a href="${j.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Mở File In</a>`
                 : `<span style="color:var(--text-dim); font-size:11.5px;">Chưa đính kèm</span>`;
 
-              const deadlineText = j.delivery_deadline 
+              const deadlineText = j.delivery_deadline
                 ? new Date(j.delivery_deadline).toLocaleDateString('vi-VN')
                 : '<span style="color:var(--text-dim);">-</span>';
 
-              const orderDate = j.order_created_at 
+              const orderDate = j.order_created_at
                 ? new Date(j.order_created_at).toLocaleDateString('vi-VN')
                 : '';
 
@@ -2120,15 +2284,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--text-muted);">Không có lệnh chuyển qua xưởng nào phù hợp bộ lọc</td></tr>`;
         } else {
           tbody.innerHTML = jobs.map(j => {
-            const fileHtml = j.file_url 
+            const fileHtml = j.file_url
               ? `<a href="${j.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Mở File In</a>`
               : `<span style="color:var(--text-dim); font-size:11.5px;">Chưa đính kèm</span>`;
 
-            const deadlineText = j.delivery_deadline 
+            const deadlineText = j.delivery_deadline
               ? new Date(j.delivery_deadline).toLocaleDateString('vi-VN')
               : '<span style="color:var(--text-dim);">-</span>';
 
-            const orderDate = j.order_created_at 
+            const orderDate = j.order_created_at
               ? new Date(j.order_created_at).toLocaleDateString('vi-VN')
               : '';
 
@@ -2247,7 +2411,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           <div>Xưởng Nhận: <strong style="font-size:11pt; color:#0f172a;">${supplierName}</strong></div>
           ${supplier.phone ? `<div>SĐT Liên Hệ: <strong>${supplier.phone}</strong></div>` : ''}
           ${supplier.address ? `<div>Địa Chỉ Xưởng: ${supplier.address}</div>` : ''}
-          <div>Ngày Xuất Phiếu: <strong>${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</strong></div>
+          <div>Ngày Xuất Phiếu: <strong>${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong></div>
           <div>Số Lượng Món: <strong>${items.length} hạng mục</strong> | Đơn liên quan: <strong>${uniqueOrders.join(', ')}</strong></div>
         </div>
       </div>
@@ -2633,9 +2797,9 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <tr class="print-summary-row">
               <td colspan="5" style="text-align:right;">
                 Phí vận chuyển (${order.shipping_method || 'Giao hàng'}) - 
-                ${order.shipping_payer === 'SHOP' 
-                  ? '<span style="color:#16a34a; font-weight:600;">Tia Chớp hỗ trợ ship</span>' 
-                  : (order.shipping_payer === 'ADVANCE_COLLECT' ? '<span style="color:#d97706; font-weight:600;">Tia Chớp ứng trước (gom thu cuối tháng)</span>' : '<span style="font-weight:600;">Khách thanh toán</span>')}:
+                ${order.shipping_payer === 'SHOP'
+          ? '<span style="color:#16a34a; font-weight:600;">Tia Chớp hỗ trợ ship</span>'
+          : (order.shipping_payer === 'ADVANCE_COLLECT' ? '<span style="color:#d97706; font-weight:600;">Tia Chớp ứng trước (gom thu cuối tháng)</span>' : '<span style="font-weight:600;">Khách thanh toán</span>')}:
               </td>
               <td style="text-align:right; ${order.shipping_payer === 'SHOP' ? 'color:#16a34a; font-weight:600;' : 'font-weight:700;'}" class="price-cell">
                 ${order.shipping_payer === 'SHOP' ? '0 đ (Freeship)' : `${this.formatNumber(order.shipping_fee)} đ`}
@@ -2859,9 +3023,9 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             ${order.shipping_fee > 0 ? `
               <div style="white-space:nowrap;">Cước phí vận chuyển: <strong>${this.formatNumber(order.shipping_fee)} đ</strong> 
                 <span style="font-size:8.5pt; font-weight:600; color:${order.shipping_payer === 'SHOP' ? '#16a34a' : (order.shipping_payer === 'ADVANCE_COLLECT' ? '#d97706' : '#0284c7')};">
-                  (${order.shipping_payer === 'SHOP' 
-                    ? 'Tia Chớp hỗ trợ / Freeship' 
-                    : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
+                  (${order.shipping_payer === 'SHOP'
+            ? 'Tia Chớp hỗ trợ / Freeship'
+            : (order.shipping_payer === 'ADVANCE_COLLECT' ? '⚡ Tia Chớp ứng trước - Gom thu cuối tháng' : 'Khách thanh toán')})
                 </span>
               </div>
             ` : ''}

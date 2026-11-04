@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=1793680044268">
+  <link rel="stylesheet" href="/css/style.css?v=1793696123456">
   <link rel="stylesheet" href="/css/mobile.css">
   <meta name="theme-color" content="#0f172a">
   <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
@@ -275,11 +275,16 @@
               </div>
 
               <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Sản phẩm mẫu (tự điền kích thước)</label>
+                <div class="form-group" style="flex: 2;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label class="form-label" style="margin-bottom:0;">Sản phẩm mẫu (tự điền thông số)</label>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-save-as-preset" style="padding: 2px 8px; font-size: 11px; font-weight:600;" onclick="App.openSaveAsPresetModal()">
+                      💾 + Lưu thành mẫu mới
+                    </button>
+                  </div>
                   <select id="calc-preset" class="form-control"></select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="flex: 1;">
                   <label class="form-label" id="calc-qty-label">Số lượng thành phẩm</label>
                   <input type="number" id="calc-quantity" class="form-control" value="500" min="1">
                 </div>
@@ -598,18 +603,18 @@
               <table class="data-table" id="orders-main-table">
                 <thead>
                   <tr>
-                    <th>Mã Đơn</th>
-                    <th>Loại</th>
-                    <th>Khách Hàng / Người Đặt</th>
-                    <th>Ấn Phẩm & Quy Cách</th>
+                    <th class="col-order-code">Mã Đơn</th>
+                    <th class="col-order-type">Loại</th>
+                    <th class="col-customer">Khách Hàng</th>
+                    <th class="col-specs">Ấn Phẩm &amp; Quy Cách</th>
                     <th class="col-supplier-info">File In</th>
                     <th class="col-supplier-info">Nơi Làm (Xưởng)</th>
-                    <th>Giá Bán</th>
-                    <th class="col-cost-profit">Giá Vốn</th>
-                    <th class="col-cost-profit">Lợi Nhuận</th>
-                    <th>Thanh Toán</th>
-                    <th>Trạng Thái</th>
-                    <th>Thao Tác</th>
+                    <th class="col-finance">Giá Bán</th>
+                    <th class="col-cost-profit col-finance">Giá Vốn</th>
+                    <th class="col-cost-profit col-finance">Lợi Nhuận</th>
+                    <th class="col-finance">Thanh Toán</th>
+                    <th class="col-status">Trạng Thái</th>
+                    <th class="col-actions">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody id="orders-table-tbody">
@@ -1091,6 +1096,7 @@
         <section class="tab-view" id="tab-admin">
           <div class="filter-tabs" id="admin-subtabs">
             <button class="filter-btn active" data-admin-sub="users">👤 Người Dùng & Phân Quyền</button>
+            <button class="filter-btn" data-admin-sub="presets">📦 Sản Phẩm Mẫu & Presets</button>
             <button class="filter-btn" data-admin-sub="template">🖨️ Thông Tin Mẫu In</button>
             <button class="filter-btn" data-admin-sub="prices">💲 Bảng Giá Vật Tư & Gia Công</button>
             <button class="filter-btn" data-admin-sub="pricecheck">✅ Kiểm Tra & Lịch Sử Giá</button>
@@ -1112,6 +1118,51 @@
                   <tr><th>Tên Đăng Nhập</th><th>Họ Tên</th><th>Liên Hệ</th><th>Vai Trò</th><th>Trạng Thái</th><th>Ngày Tạo</th><th>Thao Tác</th></tr>
                 </thead>
                 <tbody id="admin-users-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SẢN PHẨM MẪU & PRESETS -->
+          <div class="card-panel admin-sub" id="admin-sub-presets" style="display:none;">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 class="panel-title">📦 Quản Lý Sản Phẩm Mẫu &amp; Presets Tính Giá</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Cấu hình thư viện sản phẩm mẫu theo từng nhóm in ấn: In nhanh KTS, In Offset, Quảng cáo, và Đóng cuốn tài liệu.</p>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary btn-sm" onclick="Admin.openPresetModal()">+ Thêm Sản Phẩm Mẫu</button>
+              </div>
+            </div>
+
+            <!-- Bộ lọc phân loại & tìm kiếm -->
+            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+              <div class="filter-tabs" id="preset-group-filters" style="margin-bottom:0;">
+                <button type="button" class="filter-btn active" data-preset-group="ALL" onclick="Admin.filterPresetGroup('ALL')">Tất Cả</button>
+                <button type="button" class="filter-btn" data-preset-group="DIGITAL" onclick="Admin.filterPresetGroup('DIGITAL')">🖨️ In Nhanh KTS</button>
+                <button type="button" class="filter-btn" data-preset-group="OFFSET" onclick="Admin.filterPresetGroup('OFFSET')">🏭 In Offset</button>
+                <button type="button" class="filter-btn" data-preset-group="LARGE_FORMAT" onclick="Admin.filterPresetGroup('LARGE_FORMAT')">🪧 In Quảng Cáo</button>
+                <button type="button" class="filter-btn" data-preset-group="DOCUMENT_SPIRAL" onclick="Admin.filterPresetGroup('DOCUMENT_SPIRAL')">📚 Tài Liệu &amp; Lò Xo</button>
+              </div>
+              <div style="flex:1; min-width:200px;">
+                <input type="text" id="preset-search-input" class="form-control" placeholder="🔍 Tìm tên sản phẩm, mã, quy cách..." oninput="Admin.searchPresets(this.value)">
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table" id="admin-presets-table">
+                <thead>
+                  <tr>
+                    <th style="width: 120px;">Mã Mẫu</th>
+                    <th style="width: 140px;">Nhóm In</th>
+                    <th>Tên Sản Phẩm Mẫu &amp; Mô Tả</th>
+                    <th style="width: 120px;">Kích Thước</th>
+                    <th style="width: 100px;">SL Mặc Định</th>
+                    <th style="width: 80px;">ĐVT</th>
+                    <th>Quy Cách / Cấu Hình</th>
+                    <th style="width: 120px; text-align: center;">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-presets-tbody"></tbody>
               </table>
             </div>
           </div>
@@ -1788,6 +1839,275 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
         <button class="btn btn-primary" onclick="Auth.changePassword()">Lưu Mật Khẩu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: QUẢN LÝ / CẤU HÌNH SẢN PHẨM MẪU ==================== -->
+  <div class="modal-overlay" id="modal-preset">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 id="modal-preset-title">+ Thêm Sản Phẩm Mẫu</h3>
+        <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="preset-id">
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Nhóm in ấn *</label>
+            <select class="form-control" id="preset-group" onchange="Admin.onPresetGroupChange(this.value)">
+              <option value="DIGITAL">🖨️ In Nhanh KTS</option>
+              <option value="OFFSET">🏭 In Offset</option>
+              <option value="LARGE_FORMAT">🪧 In Quảng Cáo</option>
+              <option value="DOCUMENT_SPIRAL">📚 Tài Liệu &amp; Lò Xo</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Mã sản phẩm mẫu *</label>
+            <input type="text" class="form-control" id="preset-code" placeholder="VD: DIG_NAMECARD_C300">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tên sản phẩm mẫu *</label>
+          <input type="text" class="form-control" id="preset-name" placeholder="VD: Namecard C300 mờ 2 mặt (hộp 100 cái)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mô tả / Ghi chú ứng dụng</label>
+          <input type="text" class="form-control" id="preset-desc" placeholder="Mô tả tóm tắt chất liệu, cách dùng...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Rộng (mm)</label>
+            <input type="number" class="form-control" id="preset-width" value="90" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cao (mm)</label>
+            <input type="number" class="form-control" id="preset-height" value="54" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">SL mặc định</label>
+            <input type="number" class="form-control" id="preset-quantity" value="5" min="1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Đơn vị tính</label>
+            <input type="text" class="form-control" id="preset-unit" value="hộp" placeholder="hộp, tờ, cái, cuốn, tấm">
+          </div>
+          <div class="form-group" id="fg-preset-pcs">
+            <label class="form-label">Con / ĐVT</label>
+            <input type="number" class="form-control" id="preset-pcs" value="100" min="1">
+          </div>
+        </div>
+
+        <!-- THÔNG SỐ RIÊNG THEO TỪNG NHÓM -->
+        <div id="preset-group-fields-container" style="background:var(--bg-primary); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:14px; margin-top:8px;">
+          <h4 style="font-size:13px; font-weight:700; margin-bottom:10px; color:var(--accent-blue);" id="preset-group-fields-title">⚙️ Cấu hình thông số kỹ thuật in</h4>
+          
+          <!-- Nhóm KTS -->
+          <div class="preset-tech-fields" id="preset-tech-digital">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Khổ in</label>
+                <select id="preset-dig-sheet" class="form-control">
+                  <option value="325x430">32.5 x 43 cm</option>
+                  <option value="330x360">33 x 36 cm</option>
+                  <option value="320x487">32 x 48.7 cm</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Loại giấy</label>
+                <select id="preset-dig-paper" class="form-control">
+                  <option value="C115">Couche 115 gsm</option>
+                  <option value="C150">Couche 150 gsm</option>
+                  <option value="C200">Couche 200 gsm</option>
+                  <option value="C250">Couche 250 gsm</option>
+                  <option value="C300" selected>Couche 300 gsm</option>
+                  <option value="F80">Fort 80 gsm</option>
+                  <option value="DECAL">Decal</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Số mặt in</label>
+                <select id="preset-dig-sides" class="form-control">
+                  <option value="2" selected>2 mặt (4/4)</option>
+                  <option value="1">1 mặt (4/0)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Cán màng</label>
+                <select id="preset-dig-lam" class="form-control">
+                  <option value="NONE">Không cán</option>
+                  <option value="MATTE_1S">Mờ 1 mặt</option>
+                  <option value="MATTE_2S" selected>Mờ 2 mặt</option>
+                  <option value="GLOSS_1S">Bóng 1 mặt</option>
+                  <option value="GLOSS_2S">Bóng 2 mặt</option>
+                </select>
+              </div>
+            </div>
+            <div class="checkbox-group" id="preset-dig-finishing">
+              <label class="checkbox-label"><input type="checkbox" value="CORNER_ROUND"> Bo góc</label>
+              <label class="checkbox-label"><input type="checkbox" value="DIE_CUT_DEMI"> Bế demi</label>
+              <label class="checkbox-label"><input type="checkbox" value="FOLD"> Gấp</label>
+              <label class="checkbox-label"><input type="checkbox" value="STAPLE_SADDLE"> Đóng ghim</label>
+            </div>
+          </div>
+
+          <!-- Nhóm Offset -->
+          <div class="preset-tech-fields" id="preset-tech-offset" style="display:none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Mã bảng giá ghép bài (nếu có)</label>
+                <select id="preset-off-table" class="form-control" onchange="Admin.onOffsetPresetTableChange(this.value)">
+                  <option value="">-- Không ghép bài (Tùy chỉnh kỹ thuật) --</option>
+                  <option value="FLYER_A5">Tờ rơi A5 ghép bài</option>
+                  <option value="FLYER_A4">Tờ rơi A4 ghép bài</option>
+                  <option value="NAMECARD">Namecard offset ghép bài</option>
+                  <option value="FOLDER">Folder bìa hồ sơ</option>
+                  <option value="ENVELOPE_S">Bao thư nhỏ 12x22</option>
+                  <option value="ENVELOPE_M">Bao thư trung 17x23</option>
+                  <option value="ENVELOPE_L">Bao thư lớn 25x34</option>
+                  <option value="LETTERHEAD">Tiêu đề thư A4</option>
+                  <option value="CATALOGUE">Catalogue A4</option>
+                  <option value="VOUCHER">Voucher 5.4x18.5</option>
+                  <option value="TAG">Tag treo 4.5x4.5</option>
+                </select>
+              </div>
+              <div class="form-group" id="fg-preset-off-variants">
+                <label class="form-label">Biến thể mặc định</label>
+                <input type="text" class="form-control" id="preset-off-def" placeholder="VD: C150 hoặc C300 hoặc P16">
+              </div>
+            </div>
+          </div>
+
+          <!-- Nhóm Quảng Cáo -->
+          <div class="preset-tech-fields" id="preset-tech-large" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Vật liệu</label>
+              <select id="preset-lf-material" class="form-control">
+                <option value="HIFLEX" selected>Bạt Hiflex</option>
+                <option value="PP">PP trong nhà / ngoài trời</option>
+                <option value="DECAL">Decal dán kính/tường</option>
+                <option value="BACKLIT">Backlit Film hộp đèn</option>
+                <option value="CANVAS">Vải Canvas mỹ thuật</option>
+                <option value="POSTER">Poster giấy ảnh</option>
+              </select>
+            </div>
+            <div class="checkbox-group" id="preset-lf-finishing">
+              <label class="checkbox-label"><input type="checkbox" value="LAMINATE"> Cán màng</label>
+              <label class="checkbox-label"><input type="checkbox" value="MOUNT_FOAM"> Bồi Format</label>
+              <label class="checkbox-label"><input type="checkbox" value="EYELET"> Đóng khoen</label>
+              <label class="checkbox-label"><input type="checkbox" value="HEM"> Dán biên xỏ cây</label>
+              <label class="checkbox-label"><input type="checkbox" value="STANDEE"> Chân standee</label>
+              <label class="checkbox-label"><input type="checkbox" value="FRAME"> Khung gỗ / sắt</label>
+            </div>
+          </div>
+
+          <!-- Nhóm Tài liệu & Đóng cuốn -->
+          <div class="preset-tech-fields" id="preset-tech-doc" style="display:none;">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Khổ thành phẩm</label>
+                <select id="preset-doc-size" class="form-control">
+                  <option value="A5">A5 (14.8 × 21 cm)</option>
+                  <option value="A4" selected>A4 (21 × 29.7 cm)</option>
+                  <option value="A3">A3 (29.7 × 42 cm)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Số trang ruột</label>
+                <input type="number" id="preset-doc-pages" class="form-control" value="160" min="1">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Chế độ in ruột</label>
+                <select id="preset-doc-ruot" class="form-control">
+                  <option value="2 mặt Trắng Đen" selected>2 mặt Trắng Đen</option>
+                  <option value="1 mặt Trắng Đen">1 mặt Trắng Đen</option>
+                  <option value="2 mặt In Màu">2 mặt In Màu</option>
+                  <option value="1 mặt In Màu">1 mặt In Màu</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Gói Bìa &amp; Gia công đóng cuốn</label>
+                <select id="preset-doc-package" class="form-control">
+                  <option value="HARD_SPIRAL">Bìa cứng + Đóng lò xo</option>
+                  <option value="HARD_SPIRAL_GLASS" selected>Bìa cứng + Đóng lò xo + Đóng kính (Mica)</option>
+                  <option value="SOFT_SPIRAL">Bìa mềm + Đóng lò xo</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">In bìa trước</label>
+                <select id="preset-doc-front" class="form-control">
+                  <option value="In màu 1 mặt" selected>In màu 1 mặt</option>
+                  <option value="Không in / Bìa trơn">Không in / Bìa trơn</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">In bìa sau</label>
+                <select id="preset-doc-back" class="form-control">
+                  <option value="Không in / Bìa trơn" selected>Không in / Bìa trơn</option>
+                  <option value="In thêm bìa sau">In thêm bìa sau</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:14px;">
+          <div class="form-group">
+            <label class="form-label">Thứ tự hiển thị (sort order)</label>
+            <input type="number" class="form-control" id="preset-sort" value="1" min="1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Trạng thái kích hoạt</label>
+            <select class="form-control" id="preset-active">
+              <option value="1" selected>Đang sử dụng</option>
+              <option value="0">Tạm ẩn</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
+        <button class="btn btn-primary" onclick="Admin.savePreset()">💾 Lưu Sản Phẩm Mẫu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: LƯU TÍNH GIÁ HIỆN TẠI LÀM SẢN PHẨM MẪU ==================== -->
+  <div class="modal-overlay" id="modal-save-as-preset">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3>💾 Lưu Tính Giá Hiện Tại Thành Sản Phẩm Mẫu</h3>
+        <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Hệ thống sẽ lấy toàn bộ kích thước, số lượng, quy cách chất liệu và kỹ thuật đang tính hiện tại để lưu thành một sản phẩm mẫu tái sử dụng cho các lần báo giá sau.</p>
+        <div class="form-group">
+          <label class="form-label">Tên sản phẩm mẫu mới *</label>
+          <input type="text" class="form-control" id="quick-preset-name" placeholder="VD: Tờ rơi A5 Couche 200gsm bế đường cấn...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mã sản phẩm mẫu</label>
+          <input type="text" class="form-control" id="quick-preset-code" placeholder="Để trống hệ thống sẽ tự sinh mã">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Đơn vị tính</label>
+          <input type="text" class="form-control" id="quick-preset-unit" value="cái" placeholder="hộp, tờ, cuốn, cái...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mô tả tóm tắt</label>
+          <input type="text" class="form-control" id="quick-preset-desc" placeholder="Ghi chú quy cách đặc biệt nếu có...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
+        <button class="btn btn-primary" onclick="App.saveCurrentCalculationAsPreset()">💾 Xác Nhận Lưu Mẫu</button>
       </div>
     </div>
   </div>

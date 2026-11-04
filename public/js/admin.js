@@ -36,6 +36,7 @@ window.Admin = {
 
   load() {
     this.loadUsers();
+    this.loadPresets();
     this.loadSettings();
     this.loadPrices();
     this.runChecks(true);
@@ -47,6 +48,7 @@ window.Admin = {
     document.querySelectorAll('#admin-subtabs .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.adminSub === sub));
     document.querySelectorAll('.admin-sub').forEach(el => { el.style.display = el.id === `admin-sub-${sub}` ? '' : 'none'; });
     if (sub === 'backup') this.loadDbInfo();
+    if (sub === 'presets') this.loadPresets();
   },
 
   async api(url, method = 'GET', body) {
@@ -483,6 +485,324 @@ window.Admin = {
     } finally {
       const btn = document.querySelector('#admin-sub-backup .btn-accent');
       if (btn) { btn.disabled = false; btn.textContent = '⚡ TIẾN HÀNH KHÔI PHỤC DỮ LIỆU'; }
+    }
+  },
+
+  // ==========================================
+  // QUẢN LÝ SẢN PHẨM MẪU (PRESETS)
+  // ==========================================
+  presets: [],
+  presetFilterGroup: 'ALL',
+  presetSearchQuery: '',
+
+  async loadPresets() {
+    try {
+      const res = await fetch('/api/presets');
+      if (!res.ok) throw new Error('Không thể tải danh sách sản phẩm mẫu');
+      this.presets = await res.json();
+      this.renderPresets();
+    } catch (err) {
+      console.error('Lỗi nạp presets:', err);
+    }
+  },
+
+  filterPresetGroup(group) {
+    this.presetFilterGroup = group;
+    document.querySelectorAll('#preset-group-filters .filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.presetGroup === group);
+    });
+    this.renderPresets();
+  },
+
+  searchPresets(query) {
+    this.presetSearchQuery = (query || '').toLowerCase().trim();
+    this.renderPresets();
+  },
+
+  renderPresets() {
+    const tbody = document.getElementById('admin-presets-tbody');
+    if (!tbody) return;
+
+    let list = this.presets || [];
+    if (this.presetFilterGroup !== 'ALL') {
+      list = list.filter(p => p.group_type === this.presetFilterGroup);
+    }
+    if (this.presetSearchQuery) {
+      list = list.filter(p =>
+        (p.name && p.name.toLowerCase().includes(this.presetSearchQuery)) ||
+        (p.code && p.code.toLowerCase().includes(this.presetSearchQuery)) ||
+        (p.description && p.description.toLowerCase().includes(this.presetSearchQuery))
+      );
+    }
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">Không có sản phẩm mẫu nào phù hợp.</td></tr>`;
+      return;
+    }
+
+    const groupBadges = {
+      DIGITAL: '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);">🖨️ KTS</span>',
+      OFFSET: '<span class="badge" style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3);">🏭 Offset</span>',
+      LARGE_FORMAT: '<span class="badge" style="background:rgba(234,179,8,0.15); color:#facc15; border:1px solid rgba(234,179,8,0.3);">🪧 Quảng Cáo</span>',
+      DOCUMENT_SPIRAL: '<span class="badge" style="background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid rgba(34,197,94,0.3);">📚 Lò Xo</span>'
+    };
+
+    tbody.innerHTML = list.map(p => {
+      const sizeStr = (p.width && p.height) ? `${p.width} × ${p.height} mm` : (p.config?.size || 'Tiêu chuẩn');
+      let specStr = '';
+      const cfg = p.config || {};
+      if (p.group_type === 'DIGITAL') {
+        const parts = [];
+        if (cfg.paper) parts.push(`Giấy: ${cfg.paper}`);
+        if (cfg.printSides) parts.push(`In ${cfg.printSides} mặt`);
+        if (cfg.lamination && cfg.lamination !== 'NONE') parts.push(`Màng: ${cfg.lamination}`);
+        if (cfg.finishing && cfg.finishing.length) parts.push(`Gia công: ${cfg.finishing.join(', ')}`);
+        specStr = parts.join(' • ');
+      } else if (p.group_type === 'OFFSET') {
+        if (cfg.table) {
+          specStr = `Ghép bài: <b>${cfg.table}</b> (Biến thể: ${cfg.def || 'Chuẩn'})`;
+        } else {
+          specStr = `Khổ tờ: ${cfg.sheetSize || ''} • Giấy: ${cfg.paperType || ''} ${cfg.gsm || ''}gsm`;
+        }
+      } else if (p.group_type === 'LARGE_FORMAT') {
+        specStr = `Vật liệu: <b>${cfg.material || 'HIFLEX'}</b>${cfg.finishing ? ' • ' + cfg.finishing.join(', ') : ''}`;
+      } else if (p.group_type === 'DOCUMENT_SPIRAL') {
+        specStr = `Khổ: ${cfg.size || 'A5'} • ${cfg.pages || 0} trang • ${cfg.ruotPrint || ''} • Gói: ${cfg.bindingPackage || ''}`;
+      }
+
+      return `
+        <tr>
+          <td><code style="font-size:11px; font-weight:700; color:var(--text-primary);">${p.code}</code></td>
+          <td>${groupBadges[p.group_type] || p.group_type}</td>
+          <td>
+            <div style="font-weight:600; color:var(--text-primary);">${p.name}</div>
+            ${p.description ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${p.description}</div>` : ''}
+          </td>
+          <td>${sizeStr}</td>
+          <td><b>${(p.quantity || 1).toLocaleString('vi-VN')}</b></td>
+          <td>${p.unit || 'cái'}</td>
+          <td style="font-size:12px; color:var(--text-secondary); max-width:260px;">${specStr}</td>
+          <td style="text-align: center; white-space:nowrap;">
+            <button class="btn btn-secondary btn-sm" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="Admin.usePresetInPricing('${p.id}')" title="Đưa vào bộ tính giá">⚡ Tính Giá</button>
+            <button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:11px; margin-right:4px;" onclick="Admin.openPresetModal('${p.id}')" title="Chỉnh sửa">✏️</button>
+            <button class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:11px;" onclick="Admin.deletePreset('${p.id}', '${p.name.replace(/'/g, "\\'")}')" title="Xóa">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  usePresetInPricing(presetId) {
+    const p = this.presets.find(x => x.id === presetId);
+    if (!p) return;
+    // Chuyển sang tab Tính giá
+    if (window.App && window.App.switchTab) {
+      window.App.switchTab('pricing');
+      if (window.App.state.pricingGroup !== p.group_type) {
+        window.App.setPricingGroup(p.group_type);
+      }
+      setTimeout(() => {
+        const sel = document.getElementById('calc-preset');
+        if (sel) {
+          sel.value = p.code;
+          window.App.applyPricingPreset(p);
+          window.App.triggerPricingCalculation();
+        }
+      }, 100);
+    }
+  },
+
+  onPresetGroupChange(group) {
+    document.querySelectorAll('.preset-tech-fields').forEach(el => el.style.display = 'none');
+    const pcsGroup = document.getElementById('fg-preset-pcs');
+    if (pcsGroup) pcsGroup.style.display = group === 'DIGITAL' ? '' : 'none';
+
+    if (group === 'DIGITAL') document.getElementById('preset-tech-digital').style.display = '';
+    else if (group === 'OFFSET') document.getElementById('preset-tech-offset').style.display = '';
+    else if (group === 'LARGE_FORMAT') document.getElementById('preset-tech-large').style.display = '';
+    else if (group === 'DOCUMENT_SPIRAL') document.getElementById('preset-tech-doc').style.display = '';
+  },
+
+  onOffsetPresetTableChange(val) {
+    const fg = document.getElementById('fg-preset-off-variants');
+    if (fg) fg.style.display = val ? '' : 'none';
+  },
+
+  openPresetModal(id = null) {
+    const isEdit = !!id;
+    document.getElementById('modal-preset-title').textContent = isEdit ? '✏️ Chỉnh Sửa Sản Phẩm Mẫu' : '+ Thêm Sản Phẩm Mẫu Mới';
+    document.getElementById('preset-id').value = id || '';
+
+    const groupEl = document.getElementById('preset-group');
+    const codeEl = document.getElementById('preset-code');
+    const nameEl = document.getElementById('preset-name');
+    const descEl = document.getElementById('preset-desc');
+    const wEl = document.getElementById('preset-width');
+    const hEl = document.getElementById('preset-height');
+    const qtyEl = document.getElementById('preset-quantity');
+    const unitEl = document.getElementById('preset-unit');
+    const pcsEl = document.getElementById('preset-pcs');
+    const sortEl = document.getElementById('preset-sort');
+    const activeEl = document.getElementById('preset-active');
+
+    if (isEdit) {
+      const p = this.presets.find(x => x.id === id);
+      if (!p) return;
+      groupEl.value = p.group_type;
+      groupEl.disabled = true; // không đổi nhóm khi edit
+      codeEl.value = p.code;
+      codeEl.disabled = true;
+      nameEl.value = p.name;
+      descEl.value = p.description || '';
+      wEl.value = p.width || 0;
+      hEl.value = p.height || 0;
+      qtyEl.value = p.quantity || 1;
+      unitEl.value = p.unit || 'cái';
+      pcsEl.value = p.pcs_per_unit || 1;
+      sortEl.value = p.sort_order || 1;
+      activeEl.value = p.is_active ? '1' : '0';
+
+      this.onPresetGroupChange(p.group_type);
+
+      const cfg = p.config || {};
+      if (p.group_type === 'DIGITAL') {
+        if (cfg.sheetSize) document.getElementById('preset-dig-sheet').value = cfg.sheetSize;
+        if (cfg.paper) document.getElementById('preset-dig-paper').value = cfg.paper;
+        if (cfg.printSides) document.getElementById('preset-dig-sides').value = cfg.printSides;
+        if (cfg.lamination) document.getElementById('preset-dig-lam').value = cfg.lamination;
+        document.querySelectorAll('#preset-dig-finishing input').forEach(cb => {
+          cb.checked = (cfg.finishing || []).includes(cb.value);
+        });
+      } else if (p.group_type === 'OFFSET') {
+        document.getElementById('preset-off-table').value = cfg.table || '';
+        document.getElementById('preset-off-def').value = cfg.def || '';
+        this.onOffsetPresetTableChange(cfg.table);
+      } else if (p.group_type === 'LARGE_FORMAT') {
+        if (cfg.material) document.getElementById('preset-lf-material').value = cfg.material;
+        document.querySelectorAll('#preset-lf-finishing input').forEach(cb => {
+          cb.checked = (cfg.finishing || []).includes(cb.value);
+        });
+      } else if (p.group_type === 'DOCUMENT_SPIRAL') {
+        if (cfg.size) document.getElementById('preset-doc-size').value = cfg.size;
+        if (cfg.pages) document.getElementById('preset-doc-pages').value = cfg.pages;
+        if (cfg.ruotPrint) document.getElementById('preset-doc-ruot').value = cfg.ruotPrint;
+        if (cfg.bindingPackage) document.getElementById('preset-doc-package').value = cfg.bindingPackage;
+        if (cfg.frontPrint) document.getElementById('preset-doc-front').value = cfg.frontPrint;
+        if (cfg.backPrint) document.getElementById('preset-doc-back').value = cfg.backPrint;
+      }
+    } else {
+      groupEl.disabled = false;
+      groupEl.value = this.presetFilterGroup !== 'ALL' ? this.presetFilterGroup : 'DIGITAL';
+      codeEl.disabled = false;
+      codeEl.value = `SPM_${Date.now().toString().slice(-6)}`;
+      nameEl.value = '';
+      descEl.value = '';
+      wEl.value = 90;
+      hEl.value = 54;
+      qtyEl.value = 100;
+      unitEl.value = 'cái';
+      pcsEl.value = 1;
+      sortEl.value = this.presets.length + 1;
+      activeEl.value = '1';
+      this.onPresetGroupChange(groupEl.value);
+    }
+
+    document.getElementById('modal-preset').classList.add('active');
+  },
+
+  async savePreset() {
+    const id = document.getElementById('preset-id').value;
+    const isEdit = !!id;
+    const group_type = document.getElementById('preset-group').value;
+    const code = document.getElementById('preset-code').value.trim();
+    const name = document.getElementById('preset-name').value.trim();
+    const description = document.getElementById('preset-desc').value.trim();
+    const width = parseFloat(document.getElementById('preset-width').value) || 0;
+    const height = parseFloat(document.getElementById('preset-height').value) || 0;
+    const quantity = parseInt(document.getElementById('preset-quantity').value) || 1;
+    const unit = document.getElementById('preset-unit').value.trim() || 'cái';
+    const pcs_per_unit = parseInt(document.getElementById('preset-pcs').value) || 1;
+    const sort_order = parseInt(document.getElementById('preset-sort').value) || 1;
+    const is_active = parseInt(document.getElementById('preset-active').value) || 1;
+
+    if (!name) return alert('Vui lòng nhập tên sản phẩm mẫu!');
+
+    const config = {};
+    if (group_type === 'DIGITAL') {
+      config.sheetSize = document.getElementById('preset-dig-sheet').value;
+      config.paper = document.getElementById('preset-dig-paper').value;
+      config.printSides = parseInt(document.getElementById('preset-dig-sides').value) || 2;
+      config.lamination = document.getElementById('preset-dig-lam').value;
+      config.finishing = [...document.querySelectorAll('#preset-dig-finishing input:checked')].map(cb => cb.value);
+    } else if (group_type === 'OFFSET') {
+      const tbl = document.getElementById('preset-off-table').value;
+      if (tbl) {
+        config.table = tbl;
+        config.def = document.getElementById('preset-off-def').value.trim() || 'C150';
+      }
+    } else if (group_type === 'LARGE_FORMAT') {
+      config.material = document.getElementById('preset-lf-material').value;
+      config.finishing = [...document.querySelectorAll('#preset-lf-finishing input:checked')].map(cb => cb.value);
+    } else if (group_type === 'DOCUMENT_SPIRAL') {
+      config.size = document.getElementById('preset-doc-size').value;
+      config.pages = parseInt(document.getElementById('preset-doc-pages').value) || 160;
+      config.ruotPrint = document.getElementById('preset-doc-ruot').value;
+      config.bindingPackage = document.getElementById('preset-doc-package').value;
+      config.frontPrint = document.getElementById('preset-doc-front').value;
+      config.backPrint = document.getElementById('preset-doc-back').value;
+    }
+
+    const payload = {
+      group_type,
+      code,
+      name,
+      description,
+      width,
+      height,
+      quantity,
+      unit,
+      pcs_per_unit,
+      config,
+      sort_order,
+      is_active
+    };
+
+    try {
+      const url = isEdit ? `/api/presets/${id}` : '/api/presets';
+      const method = isEdit ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi lưu sản phẩm mẫu');
+
+      alert(isEdit ? '✅ Đã cập nhật sản phẩm mẫu thành công!' : '✅ Đã thêm mới sản phẩm mẫu thành công!');
+      if (window.App && window.App.closeModals) window.App.closeModals();
+      await this.loadPresets();
+      // Đồng bộ lại danh sách presets ở tab tính giá nếu App đang mở
+      if (window.App && window.App.loadPresetsFromApi) {
+        await window.App.loadPresetsFromApi();
+      }
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  },
+
+  async deletePreset(id, name) {
+    if (!confirm(`Bạn có chắc muốn xóa sản phẩm mẫu "${name}" không?`)) return;
+    try {
+      const res = await fetch(`/api/presets/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi xóa');
+      alert('✅ Đã xóa sản phẩm mẫu thành công!');
+      await this.loadPresets();
+      if (window.App && window.App.loadPresetsFromApi) {
+        await window.App.loadPresetsFromApi();
+      }
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     }
   }
 };

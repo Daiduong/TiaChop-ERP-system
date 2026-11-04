@@ -158,6 +158,26 @@ function initDatabase() {
       unit TEXT,
       metadata TEXT
     );
+
+    -- Bảng Sản phẩm mẫu / Presets tính giá
+    CREATE TABLE IF NOT EXISTS product_presets (
+      id TEXT PRIMARY KEY,
+      group_type TEXT NOT NULL, -- DIGITAL, OFFSET, LARGE_FORMAT, DOCUMENT_SPIRAL
+      code TEXT UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      unit TEXT DEFAULT 'cái',
+      width REAL DEFAULT 0,
+      height REAL DEFAULT 0,
+      quantity INTEGER DEFAULT 100,
+      pcs_per_unit INTEGER DEFAULT 1,
+      supplier_id TEXT,
+      config_json TEXT,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   ensureOwnerColumns();
