@@ -15,6 +15,7 @@ const App = {
     settings: {}, // Cấu hình công ty (hotline, tên cty...)
     supplierJobs: [], // Cache danh sách lệnh in của xưởng
     supplierJobsView: 'grouped', // 'grouped' hoặc 'flat'
+    ordersViewMode: localStorage.getItem('orders_view_mode') || 'cards', // 'cards' (Thẻ Thông Minh) hoặc 'table' (Bảng chi tiết)
     filters: {
       status: 'ALL',
       type: null,
@@ -1221,13 +1222,195 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       // Bảo vệ: chỉ gán nếu server trả về array hợp lệ
       this.state.orders = Array.isArray(orders) ? orders : [];
 
-      this.renderOrdersTable();
-      console.log('[loadOrders] renderOrdersTable() hoàn tất, state.orders.length =', this.state.orders.length);
+      this.renderOrders();
+      console.log('[loadOrders] renderOrders() hoàn tất, state.orders.length =', this.state.orders.length);
     } catch (err) {
       console.error('[loadOrders] Exception:', err);
     }
   },
 
+  setOrdersViewMode(mode) {
+    this.state.ordersViewMode = mode;
+    localStorage.setItem('orders_view_mode', mode);
+    this.updateOrdersViewButtons();
+    this.renderOrders();
+  },
+
+  updateOrdersViewButtons() {
+    const isCards = this.state.ordersViewMode === 'cards';
+    const btnCards = document.getElementById('btn-orders-view-cards');
+    const btnTable = document.getElementById('btn-orders-view-table');
+    const cardsContainer = document.getElementById('orders-cards-container');
+    const tableWrapper = document.getElementById('orders-table-wrapper');
+
+    if (btnCards) {
+      btnCards.className = isCards ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+    }
+    if (btnTable) {
+      btnTable.className = isCards ? 'btn btn-sm btn-secondary' : 'btn btn-sm btn-primary';
+    }
+    if (cardsContainer) {
+      cardsContainer.style.display = isCards ? 'grid' : 'none';
+    }
+    if (tableWrapper) {
+      tableWrapper.style.display = isCards ? 'none' : 'block';
+    }
+  },
+
+  renderOrders() {
+    this.updateOrdersViewButtons();
+    if (this.state.ordersViewMode === 'cards') {
+      this.renderOrdersCards();
+    } else {
+      this.renderOrdersTable();
+    }
+  },
+
+  renderOrdersCards() {
+    const container = document.getElementById('orders-cards-container');
+    if (!container) return;
+
+    if (!this.state.orders || this.state.orders.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted); grid-column: 1 / -1; background:var(--bg-card); border-radius:var(--radius-md); border:1px dashed var(--border-subtle);">Không tìm thấy đơn hàng / báo giá nào phù hợp.</div>`;
+      return;
+    }
+
+    const isSales = (this.state.currentRole === 'SALES');
+
+    try {
+      container.innerHTML = this.state.orders.map(o => {
+        const safeCustomerName = (o.customer_name || '').replace(/'/g, '\\&apos;');
+        const itemsList = (o.items || []).map(it => `
+          <div class="order-card-item">
+            <div style="font-weight:600; color:var(--text-main);">
+              • ${it.item_name} <span style="color:var(--text-dim); font-size:12px;">(${it.quantity} ${it.unit})</span>
+            </div>
+            ${it.specs ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${it.specs}</div>` : ''}
+          </div>
+        `).join('');
+
+        const firstItem = (o.items || [])[0] || {};
+        const supplierName = firstItem.supplier_name || 'Chưa gán xưởng';
+        const fileLink = firstItem.file_url ? `
+          <a href="${firstItem.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Xem File In</a>
+        ` : '<span style="color:var(--text-dim);">Chưa có file</span>';
+
+        return `
+          <div class="order-smart-card">
+            <!-- Header: Mã đơn, Loại, Ngày lập -->
+            <div class="order-card-header">
+              <div class="order-card-code-area">
+                <span class="order-card-code">${o.code}</span>
+                <span class="badge ${o.type === 'QUOTE' ? 'badge-quote' : 'badge-confirmed'}">
+                  ${o.type === 'QUOTE' ? 'BÁO GIÁ' : 'ĐƠN HÀNG'}
+                </span>
+                <span class="order-card-date">📅 ${new Date(o.created_at).toLocaleDateString('vi-VN')}</span>
+              </div>
+              <div>
+                ${o.payment_status === 'PAID' ? '<span class="badge badge-paid">Đã TT Đủ</span>' : (o.payment_status === 'PARTIAL' ? '<span class="badge badge-partial">Đã Cọc</span>' : '<span class="badge badge-unpaid">Chưa TT</span>')}
+              </div>
+            </div>
+
+            <!-- Khách hàng -->
+            <div class="order-card-customer">
+              <div class="cust-title" title="${o.customer_name || ''}">
+                🏢 ${o.customer_name || 'Khách vãng lai'}
+              </div>
+              <div class="cust-meta">
+                ${o.customer_code ? `<span class="cust-code-badge">${o.customer_code}</span>` : ''}
+                ${o.contact_name ? `<span>👤 ${o.contact_name}</span>` : ''}
+                ${o.customer_phone ? `<span>📞 <a href="tel:${o.customer_phone}" style="color:inherit; text-decoration:none;">${o.customer_phone}</a></span>` : ''}
+              </div>
+            </div>
+
+            <!-- Ấn phẩm & Quy cách -->
+            <div class="order-card-items-box">
+              ${itemsList || '<div style="color:var(--text-dim);">Không có chi tiết ấn phẩm</div>'}
+            </div>
+
+            <!-- Thông tin xưởng & File (Ẩn với Sales) -->
+            ${!isSales ? `
+              <div class="order-card-workshop-bar">
+                <div>🏭 Xưởng: <strong style="color:var(--accent-amber);">${supplierName}</strong></div>
+                <div>${fileLink}</div>
+              </div>
+            ` : ''}
+
+            <!-- Tài chính & Giá (Giá bán, Vốn, Lãi, Nợ) -->
+            <div class="order-card-finance-grid">
+              <div class="finance-box">
+                <span class="fin-label">Tổng Bán</span>
+                <span class="fin-val" style="color:var(--primary-light);">${this.formatCurrency(o.total_selling)}</span>
+                ${o.shipping_fee > 0 ? `
+                  <div style="font-size:10px; color:${o.shipping_payer === 'SHOP' ? 'var(--accent-green)' : 'var(--accent-amber)'}; margin-top:1px;">
+                    🚚 Ship: ${this.formatCurrency(o.shipping_fee)}
+                  </div>
+                ` : ''}
+              </div>
+
+              ${!isSales ? `
+                <div class="finance-box col-cost-profit">
+                  <span class="fin-label">Giá Vốn</span>
+                  <span class="fin-val" style="color:var(--accent-amber);">${this.formatCurrency(o.total_cost)}</span>
+                </div>
+
+                <div class="finance-box col-cost-profit">
+                  <span class="fin-label">Lợi Nhuận</span>
+                  <span class="fin-val" style="color:var(--accent-green);">${this.formatCurrency(o.gross_profit)}</span>
+                </div>
+              ` : ''}
+
+              <div class="finance-box">
+                <span class="fin-label">Còn Nợ</span>
+                <span class="fin-val" style="color:${o.remaining_amount > 0 ? 'var(--accent-rose)' : 'var(--accent-green)'};">
+                  ${o.remaining_amount > 0 ? this.formatCurrency(o.remaining_amount) : '0 đ'}
+                </span>
+              </div>
+            </div>
+
+            <!-- Trạng thái sản xuất & Vận chuyển -->
+            <div class="order-card-status-bar">
+              <div style="flex:1; min-width:180px;">
+                <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:12px; padding:4px 8px; width:100%; border-radius:var(--radius-sm);">
+                  <option value="DRAFT" ${o.status === 'DRAFT' ? 'selected' : ''}>Nháp</option>
+                  <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>Đã Gửi Báo Giá</option>
+                  <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>Đã Chốt Đơn</option>
+                  <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>Đang In Xưởng</option>
+                  <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>Xưởng Đã Xong</option>
+                  <option value="DELIVERING" ${o.status === 'DELIVERING' ? 'selected' : ''}>🚚 Đang Giao</option>
+                  <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>📦 Đã Giao</option>
+                  <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>Hoàn Thành</option>
+                </select>
+              </div>
+              ${o.shipping_method ? `
+                <div style="font-size:11px; color:var(--text-muted);">
+                  🚚 ${o.shipping_method}${o.tracking_code ? ` (${o.tracking_code})` : ''}
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Các nút thao tác nghiệp vụ -->
+            <div class="order-card-actions">
+              ${o.type === 'QUOTE' ? `
+                <button class="btn btn-accent btn-sm" onclick="App.convertToOrder('${o.id}')" title="Chốt thành đơn hàng chính thức">⚡ Chốt Đơn</button>
+              ` : ''}
+              ${!['COMPLETED', 'CANCELLED'].includes(o.status) ? `
+                <button class="btn btn-secondary btn-sm" onclick="App.editOrder('${o.id}')" title="Sửa thông tin đơn hàng" style="color:var(--accent-amber);">✏️ Sửa</button>
+              ` : ''}
+              <button class="btn btn-secondary btn-sm" onclick="App.openDeliveryModal('${o.id}')" title="Cập nhật giao hàng & phí ship" style="color:var(--primary-light);">🚚 Giao Hàng</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.openPaymentModal('${o.id}', '${o.code}', '${safeCustomerName}', ${o.remaining_amount || 0})" title="Thu tiền cọc / thanh toán">💳 Thu Tiền</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Phiếu Báo Giá / Đơn Hàng PDF">🖨️ Phiếu Bán</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.printDeliveryNote('${o.id}')" title="In Phiếu Giao Hàng Cho Tài Xế / Khách">📦 Phiếu Giao</button>
+              ${!isSales ? `<button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${o.id}')" title="In Phiếu Lệnh In Gửi Xưởng">🏭 Lệnh Xưởng</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('[renderOrdersCards] Error:', err);
+      container.innerHTML = `<div style="color:var(--accent-rose); padding:20px; text-align:center;">Lỗi hiển thị thẻ đơn hàng.</div>`;
+    }
+  },
 
   renderOrdersTable() {
     const tbody = document.getElementById('orders-table-tbody');

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=1793696123456">
+  <link rel="stylesheet" href="/css/style.css?v=1793885999000">
   <link rel="stylesheet" href="/css/mobile.css">
   <meta name="theme-color" content="#0f172a">
   <link rel="icon" type="image/png" href="/assets/logo.png?v=2">
@@ -589,7 +589,16 @@
                   <button class="filter-btn" data-filter-status="COMPLETED">Hoàn Thành</button>
                 </div>
               </div>
-              <div style="display:flex; gap:8px; align-items:center;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <!-- View Mode Toggle: Grid Cards vs Compact Table -->
+                <div style="display: inline-flex; background: var(--bg-surface); padding: 2px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                  <button type="button" id="btn-orders-view-cards" class="btn btn-sm btn-primary" onclick="App.setOrdersViewMode('cards')" style="font-size: 12px; padding: 4px 10px;" title="Chế độ Thẻ Thông Minh (vừa vặn mọi màn hình, không cần cuộn ngang)">
+                    🗂️ Thẻ Thông Minh
+                  </button>
+                  <button type="button" id="btn-orders-view-table" class="btn btn-sm btn-secondary" onclick="App.setOrdersViewMode('table')" style="font-size: 12px; padding: 4px 10px;" title="Chế độ Bảng Dữ Liệu">
+                    📄 Bảng Chi Tiết
+                  </button>
+                </div>
                 <button class="btn btn-secondary btn-sm" onclick="App.exportOrdersExcel()" title="Xuất danh sách đơn hàng ra file Excel">
                   📥 Xuất Excel
                 </button>
@@ -599,7 +608,13 @@
               </div>
             </div>
 
-            <div class="table-responsive">
+            <!-- CHẾ ĐỘ 1: THẺ THÔNG MINH (CARDS VIEW) - KHÔNG CẦN CUỘN NGANG, BAO QUÁT MỌI MÀN HÌNH -->
+            <div id="orders-cards-container" class="orders-cards-grid" style="display: grid; gap: 14px; margin-top: 14px;">
+              <!-- Injected via JS -->
+            </div>
+
+            <!-- CHẾ ĐỘ 2: BẢNG TRUYỀN THỐNG (TABLE VIEW) -->
+            <div class="table-responsive" id="orders-table-wrapper" style="display: none; margin-top: 14px;">
               <table class="data-table" id="orders-main-table">
                 <thead>
                   <tr>
