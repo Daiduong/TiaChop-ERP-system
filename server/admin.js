@@ -182,7 +182,8 @@ db.exec(`
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     input TEXT NOT NULL,           -- JSON đầu vào của Bộ Tính Giá
-    expected_price REAL,           -- Giá bán chuẩn đã được Admin xác nhận (đối chiếu thủ công / báo giá xưởng)
+    expected_cost REAL,            -- Giá mua / giá vốn xưởng chuẩn từ NCC
+    expected_price REAL,           -- Giá bán chuẩn (hoặc tính theo tỷ suất)
     tolerance_pct REAL DEFAULT 2,  -- % sai lệch cho phép
     note TEXT,
     created_by TEXT,
@@ -222,10 +223,10 @@ function evalCheck(check, database) {
   }
 }
 
-function judge(price, expected, tol) {
-  if (price === null) return 'LOI';
+function judge(val, expected, tol) {
+  if (val === null) return 'LOI';
   if (expected === null || expected === undefined) return 'CHUA_CHUAN';
-  const diffPct = expected ? Math.abs(price - expected) / expected * 100 : (price ? 100 : 0);
+  const diffPct = expected ? Math.abs(val - expected) / expected * 100 : (val ? 100 : 0);
   return diffPct <= (tol ?? 2) ? 'OK' : 'LECH';
 }
 
@@ -235,22 +236,36 @@ function runAll(overrides) {
   const sim = overrides ? dbWithOverrides(overrides) : null;
   return checks.map(c => {
     const now = evalCheck(c, cur);
+    // Ưu tiên đối chiếu giá mua/giá vốn xưởng (expected_cost). Nếu không có mới fallback sang expected_price
+    const hasExpectedCost = (c.expected_cost !== null && c.expected_cost !== undefined);
+    const targetBenchmark = hasExpectedCost ? c.expected_cost : c.expected_price;
+    const targetActual = hasExpectedCost ? now.cost : now.price;
+
     const row = {
       id: c.id, name: c.name, note: c.note, group: now.group,
       input: JSON.parse(c.input || '{}'),
-      expected: c.expected_price, tolerance_pct: c.tolerance_pct,
-      price: now.price, cost: now.cost, error: now.error,
-      diff: (now.price !== null && c.expected_price !== null) ? now.price - c.expected_price : null,
-      diff_pct: (now.price !== null && c.expected_price) ? Math.round((now.price - c.expected_price) / c.expected_price * 1000) / 10 : null,
-      status: judge(now.price, c.expected_price, c.tolerance_pct)
+      expected_cost: c.expected_cost,
+      expected: c.expected_price,
+      tolerance_pct: c.tolerance_pct,
+      price: now.price,
+      cost: now.cost,
+      error: now.error,
+      // So sánh trực tiếp giá mua từ nhà cung cấp
+      cost_diff: (now.cost !== null && c.expected_cost !== null) ? now.cost - c.expected_cost : null,
+      cost_diff_pct: (now.cost !== null && c.expected_cost) ? Math.round((now.cost - c.expected_cost) / c.expected_cost * 1000) / 10 : null,
+      diff: (targetActual !== null && targetBenchmark !== null) ? targetActual - targetBenchmark : null,
+      diff_pct: (targetActual !== null && targetBenchmark) ? Math.round((targetActual - targetBenchmark) / targetBenchmark * 1000) / 10 : null,
+      status: judge(targetActual, targetBenchmark, c.tolerance_pct)
     };
     if (sim) {
       const after = evalCheck(c, sim);
       row.sim_price = after.price;
+      row.sim_cost = after.cost;
       row.sim_error = after.error;
-      row.sim_change = (after.price !== null && now.price !== null) ? after.price - now.price : null;
-      row.sim_change_pct = (after.price !== null && now.price) ? Math.round((after.price - now.price) / now.price * 1000) / 10 : null;
-      row.sim_status = judge(after.price, c.expected_price, c.tolerance_pct);
+      const simActual = hasExpectedCost ? after.cost : after.price;
+      row.sim_change = (simActual !== null && targetActual !== null) ? simActual - targetActual : null;
+      row.sim_change_pct = (simActual !== null && targetActual) ? Math.round((simActual - targetActual) / targetActual * 1000) / 10 : null;
+      row.sim_status = judge(simActual, targetBenchmark, c.tolerance_pct);
     }
     return row;
   });
@@ -265,11 +280,16 @@ function seedPriceChecks() {
     ['Offset catalogue A4 C150 4/4 - 2.000 tờ', { group: 'OFFSET', productName: 'Tờ rơi A4 offset', quantity: 2000, width: 210, height: 297, sheetSize: '430x650', paperType: 'COUCHE', gsm: 150, colorsFront: 4, colorsBack: 4, workAndTurn: false, lamination: 'NONE', finishing: [], marginPercent: 40 }],
     ['Bạt Hiflex 1m x 2m - 1 tấm', { group: 'LARGE_FORMAT', productName: 'Bạt Hiflex', quantity: 1, width: 1000, height: 2000, material: 'HIFLEX', finishing: ['EYELET'], marginPercent: 40 }]
   ];
-  const ins = db.prepare('INSERT INTO price_checks (id, name, input, expected_price, tolerance_pct, note, created_by) VALUES (?, ?, ?, ?, 2, ?, ?)');
+  const ins = db.prepare('INSERT INTO price_checks (id, name, input, expected_cost, expected_price, tolerance_pct, note, created_by) VALUES (?, ?, ?, ?, ?, 2, ?, ?)');
   samples.forEach(([name, input]) => {
+    let cost = null;
     let price = null;
-    try { price = calculatePrice(db, input).suggestedSellingPrice; } catch (e) { /* bỏ qua */ }
-    ins.run(crypto.randomUUID(), name, JSON.stringify(input), price, 'Giá chuẩn ban đầu = kết quả hệ thống. Hãy đối chiếu báo giá thực tế rồi chỉnh lại.', 'system');
+    try {
+      const r = calculatePrice(db, input);
+      cost = r.totalCost;
+      price = r.suggestedSellingPrice;
+    } catch (e) { /* bỏ qua */ }
+    ins.run(crypto.randomUUID(), name, JSON.stringify(input), cost, price, 'Đối chiếu giá vốn xưởng / giá mua từ NCC thực tế.', 'system');
   });
 }
 seedPriceChecks();
@@ -288,22 +308,27 @@ router.post('/price-checks/simulate', (req, res) => {
 
 router.post('/price-checks', (req, res) => {
   try {
-    const { name, input, expected_price, tolerance_pct, note } = req.body || {};
+    const { name, input, expected_cost, expected_price, tolerance_pct, note } = req.body || {};
     if (!name || !input || typeof input !== 'object') return res.status(400).json({ error: 'Thiếu tên hoặc dữ liệu đầu vào' });
     const r = calculatePrice(db, input); // đảm bảo input hợp lệ
+    const expCost = (expected_cost === undefined || expected_cost === null || expected_cost === '') ? r.totalCost : Number(expected_cost);
     const expected = (expected_price === undefined || expected_price === null || expected_price === '') ? r.suggestedSellingPrice : Number(expected_price);
     const id = crypto.randomUUID();
-    db.prepare('INSERT INTO price_checks (id, name, input, expected_price, tolerance_pct, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, String(name).trim(), JSON.stringify(input), expected, tolerance_pct === undefined ? 2 : Number(tolerance_pct), note || '', req.user?.full_name || '');
+    db.prepare('INSERT INTO price_checks (id, name, input, expected_cost, expected_price, tolerance_pct, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, String(name).trim(), JSON.stringify(input), expCost, expected, tolerance_pct === undefined ? 2 : Number(tolerance_pct), note || '', req.user?.full_name || '');
     res.json({ success: true, id });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 router.put('/price-checks/:id', (req, res) => {
-  const { name, expected_price, tolerance_pct, note } = req.body || {};
-  const r = db.prepare(`UPDATE price_checks SET name = COALESCE(?, name), expected_price = COALESCE(?, expected_price),
+  const { name, expected_cost, expected_price, tolerance_pct, note } = req.body || {};
+  const r = db.prepare(`UPDATE price_checks SET name = COALESCE(?, name),
+    expected_cost = COALESCE(?, expected_cost),
+    expected_price = COALESCE(?, expected_price),
     tolerance_pct = COALESCE(?, tolerance_pct), note = COALESCE(?, note) WHERE id = ?`)
-    .run(name ?? null, expected_price === undefined || expected_price === '' ? null : Number(expected_price),
+    .run(name ?? null,
+      expected_cost === undefined || expected_cost === '' ? null : Number(expected_cost),
+      expected_price === undefined || expected_price === '' ? null : Number(expected_price),
       tolerance_pct === undefined || tolerance_pct === '' ? null : Number(tolerance_pct), note ?? null, req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Không tìm thấy ca kiểm tra' });
   res.json({ success: true });
@@ -314,9 +339,9 @@ router.post('/price-checks/:id/accept', (req, res) => {
   const c = db.prepare('SELECT * FROM price_checks WHERE id = ?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Không tìm thấy ca kiểm tra' });
   const now = evalCheck(c, db);
-  if (now.price === null) return res.status(400).json({ error: now.error || 'Không tính được giá' });
-  db.prepare('UPDATE price_checks SET expected_price = ? WHERE id = ?').run(now.price, c.id);
-  res.json({ success: true, expected_price: now.price });
+  if (now.price === null || now.cost === null) return res.status(400).json({ error: now.error || 'Không tính được giá' });
+  db.prepare('UPDATE price_checks SET expected_cost = ?, expected_price = ? WHERE id = ?').run(now.cost, now.price, c.id);
+  res.json({ success: true, expected_cost: now.cost, expected_price: now.price });
 });
 
 router.delete('/price-checks/:id', (req, res) => {

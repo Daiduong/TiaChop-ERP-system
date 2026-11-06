@@ -1268,15 +1268,27 @@
             <div class="card-panel">
               <div class="panel-header">
                 <div>
-                  <h2 class="panel-title">✅ Kiểm Tra & Đối Chiếu Tính Giá</h2>
-                  <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Mỗi ca kiểm tra là một sản phẩm mẫu kèm <strong>giá bán chuẩn</strong> do Admin xác nhận (tính tay / báo giá xưởng). Sau mỗi lần đổi bảng giá, chạy kiểm tra để thấy ca nào lệch quá dung sai cho phép. Thêm ca mới từ tab <em>Tính Giá & Bình Bài</em> (nút 🧪).</p>
+                  <h2 class="panel-title">✅ Kiểm Tra &amp; Đối Chiếu Giá Mua NCC (Giá Vốn Xưởng)</h2>
+                  <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Đối chiếu <strong>Giá Mua thực tế từ Nhà Cung Cấp / Xưởng In</strong> với công thức tính giá vốn của hệ thống. Nếu có chênh lệch, bạn có thể chỉnh trực tiếp giá chuẩn hoặc cập nhật lại bảng giá vật tư.</p>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="Admin.runChecks()">▶ Chạy Kiểm Tra</button>
+                <button class="btn btn-primary btn-sm" onclick="Admin.runChecks()">▶ Chạy Kiểm Tra Giá Mua</button>
               </div>
               <div id="admin-check-summary" style="margin-bottom:10px; font-size:13px;"></div>
               <div class="table-responsive">
                 <table class="data-table">
-                  <thead><tr><th>Ca kiểm tra</th><th>Nhóm</th><th>Giá chuẩn (đ)</th><th>Dung sai %</th><th>Giá hệ thống (đ)</th><th>Lệch</th><th>Kết quả</th><th></th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Ca kiểm tra ấn phẩm</th>
+                      <th>Nhóm</th>
+                      <th style="color:var(--accent-amber);">Giá Mua NCC Chuẩn (đ)</th>
+                      <th>Dung sai %</th>
+                      <th style="color:var(--text-main);">Giá Vốn Hệ Thống (đ)</th>
+                      <th>Lệch Giá Vốn</th>
+                      <th style="color:var(--primary-light);">Giá Bán HT (đ)</th>
+                      <th>Kết quả</th>
+                      <th>Thao tác</th>
+                    </tr>
+                  </thead>
                   <tbody id="admin-checks-tbody"></tbody>
                 </table>
               </div>
@@ -1987,6 +1999,7 @@
                   <option value="CATALOGUE">Catalogue A4</option>
                   <option value="VOUCHER">Voucher 5.4x18.5</option>
                   <option value="TAG">Tag treo 4.5x4.5</option>
+                  <option value="RED_ENVELOPE">Bao lì xì C150 (8 x 16 nắp 2.5 cm)</option>
                 </select>
               </div>
               <div class="form-group" id="fg-preset-off-variants">

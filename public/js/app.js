@@ -743,6 +743,7 @@ const App = {
       { key: 'CATALOGUE', table: 'CATALOGUE', name: 'Catalogue A4 bấm ghim', w: 210, h: 297, qty: 500, unit: 'cuốn', variants: ['P8', 'P16', 'P24', 'P32'], def: 'P16' },
       { key: 'VOUCHER', table: 'VOUCHER', name: 'Voucher 5.4 x 18.5 cm', w: 54, h: 185, qty: 1000, unit: 'cái', variants: ['C300'] },
       { key: 'TAG', table: 'TAG', name: 'Tag treo 4.5 x 4.5 cm', w: 45, h: 45, qty: 1000, unit: 'cái', variants: ['C300'] },
+      { key: 'RED_ENVELOPE', table: 'RED_ENVELOPE', name: 'Bao lì xì C150 (8 x 16 nắp 2.5 cm)', w: 80, h: 160, qty: 1000, unit: 'cái', variants: ['NO_LAM', 'LAM'], def: 'NO_LAM' },
       { key: 'CUSTOM', name: 'Kích thước tùy chỉnh (tính theo công thức kẽm/giấy)', custom: true }
     ],
     LARGE_FORMAT: [
@@ -820,7 +821,12 @@ const App = {
       document.getElementById('fg-off-variant').style.display = isTable ? '' : 'none';
       document.getElementById('off-tech-fields').style.display = isTable ? 'none' : '';
       if (isTable) {
-        const label = (k) => k.startsWith('P') ? `${k.slice(1)} trang` : k;
+        const label = (k) => {
+          if (k === 'NO_LAM') return 'Không cán màng';
+          if (k === 'LAM') return 'Cán màng';
+          if (k.startsWith('P')) return `${k.slice(1)} trang`;
+          return k;
+        };
         document.getElementById('calc-off-variant').innerHTML = p.variants.map(k => `<option value="${k}"${k === (p.def || p.variants[0]) ? ' selected' : ''}>${label(k)}</option>`).join('');
       }
     }

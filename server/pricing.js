@@ -123,7 +123,10 @@ const OFFSET_PRICE_TABLES = {
   VOUCHER: { label: 'Voucher C300 cán mờ 5.4x18.5cm', unit: 'cái', variants: {
     C300: [[500, 250000], [1000, 370000], [2000, 620000], [5000, 1370000]] } },
   TAG: { label: 'Tag treo C300 cán mờ 4.5x4.5cm đục 1 lỗ', unit: 'cái', variants: {
-    C300: [[500, 130000], [1000, 180000], [2000, 260000], [5000, 670000]] } }
+    C300: [[500, 130000], [1000, 180000], [2000, 260000], [5000, 670000]] } },
+  RED_ENVELOPE: { label: 'Bao lì xì C150 (8 x 16 nắp 2.5 cm)', unit: 'cái', variants: {
+    NO_LAM: [[1000, 550000], [2000, 1000000], [3000, 1450000], [5000, 2200000], [10000, 4000000], [20000, 7400000]],
+    LAM: [[1000, 650000], [2000, 1200000], [3000, 1700000], [5000, 2600000], [10000, 4900000], [20000, 9000000]] } }
 };
 
 function tablePrice(points, qty) {
@@ -259,10 +262,11 @@ function calcDigital(input, P) {
     lines.push({ group: 'Gia công', name: `Phụ phí cán 2 mặt (${sheets} tờ × ${fmt(sheet.lamSurcharge)})`, cost: round(sheets * sheet.lamSurcharge) });
   }
 
-  // 2) Tiền giấy (tính riêng theo khổ & định lượng). Decal: giá giấy decal riêng
+  // 2) Tiền giấy (tính riêng theo khổ & định lượng). Ưu tiên đơn giá cập nhật từ print_configs nếu có
+  const configuredPaper = P(paperCode, null);
   const paperUnit = isDecal
     ? P('DECAL', 2000)
-    : (sheet.paper[paperCode] ?? sheet.paper[DIG_PAPER_ALIAS[paperCode]] ?? sheet.paper.C150);
+    : (configuredPaper !== null ? configuredPaper : (sheet.paper[paperCode] ?? sheet.paper[DIG_PAPER_ALIAS[paperCode]] ?? sheet.paper.C150));
   lines.push({ group: 'Vật tư', name: `Giấy ${paperCode} (${sheets} tờ × ${fmt(paperUnit)})`, cost: round(sheets * paperUnit) });
 
   // 3) Gia công

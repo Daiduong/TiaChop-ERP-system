@@ -332,44 +332,60 @@ window.Admin = {
       const bad = rows.filter(r => r.status === 'LECH' || r.status === 'LOI');
       const unset = rows.filter(r => r.status === 'CHUA_CHUAN');
       document.getElementById('admin-check-summary').innerHTML = rows.length
-        ? `<strong>${rows.length - bad.length - unset.length}/${rows.length}</strong> ca đúng` +
-          (bad.length ? ` · <span style="color:var(--accent-rose); font-weight:700;">${bad.length} ca lệch/lỗi — cần kiểm tra lại bảng giá hoặc công thức</span>` : ' · <span style="color:var(--accent-green);">toàn bộ khớp giá chuẩn ✅</span>') +
+        ? `<strong>${rows.length - bad.length - unset.length}/${rows.length}</strong> ca đúng giá mua NCC` +
+          (bad.length ? ` · <span style="color:var(--accent-rose); font-weight:700;">${bad.length} ca lệch giá vốn NCC — cần kiểm tra lại đơn giá vật tư hoặc cập nhật lại giá chuẩn</span>` : ' · <span style="color:var(--accent-green);">toàn bộ khớp giá mua NCC chuẩn ✅</span>') +
           (unset.length ? ` · ${unset.length} ca chưa có giá chuẩn` : '')
         : 'Chưa có ca kiểm tra nào.';
-      document.getElementById('admin-checks-tbody').innerHTML = rows.map(r => `
+      document.getElementById('admin-checks-tbody').innerHTML = rows.map(r => {
+        const hasExpectedCost = (r.expected_cost !== null && r.expected_cost !== undefined);
+        const targetExpected = hasExpectedCost ? r.expected_cost : r.expected;
+        const diffVal = hasExpectedCost ? r.cost_diff : r.diff;
+        const diffPct = hasExpectedCost ? r.cost_diff_pct : r.diff_pct;
+
+        return `
         <tr data-id="${r.id}">
           <td><strong>${this.esc(r.name)}</strong>${r.note ? `<div style="font-size:11px; color:var(--text-dim);">${this.esc(r.note)}</div>` : ''}</td>
           <td style="font-size:12px;">${this.esc(r.group || '')}</td>
-          <td><input type="number" class="form-control chk-expected" value="${r.expected ?? ''}" style="width:120px;"></td>
-          <td><input type="number" step="0.5" min="0" class="form-control chk-tol" value="${r.tolerance_pct ?? 2}" style="width:70px;"></td>
-          <td>${r.error ? `<span style="color:var(--accent-rose); font-size:12px;">${this.esc(r.error)}</span>` : `<strong>${this.fmtMoney(r.price)}</strong>`}</td>
-          <td>${this.fmtDiff(r.diff, r.diff_pct)}</td>
+          <td>
+            <input type="number" class="form-control chk-expected-cost" value="${targetExpected ?? ''}" style="width:130px; font-weight:600; color:var(--accent-amber);" title="Giá vốn / giá mua từ xưởng">
+          </td>
+          <td><input type="number" step="0.5" min="0" class="form-control chk-tol" value="${r.tolerance_pct ?? 2}" style="width:65px;"></td>
+          <td>${r.error ? `<span style="color:var(--accent-rose); font-size:12px;">${this.esc(r.error)}</span>` : `<strong style="color:var(--text-main);">${this.fmtMoney(r.cost)}</strong>`}</td>
+          <td>${this.fmtDiff(diffVal, diffPct)}</td>
+          <td style="color:var(--primary-light); font-weight:600;">${this.fmtMoney(r.price)}</td>
           <td>${this.statusBadge(r.status)}</td>
           <td><div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm" onclick="Admin.saveCheck('${r.id}')" title="Lưu giá chuẩn / dung sai">💾</button>
-            <button class="btn btn-secondary btn-sm" onclick="Admin.acceptCheck('${r.id}')" title="Chấp nhận giá hệ thống làm giá chuẩn mới">✔ Nhận giá HT</button>
+            <button class="btn btn-secondary btn-sm" onclick="Admin.saveCheck('${r.id}')" title="Lưu giá mua NCC chuẩn">💾 Lưu</button>
+            <button class="btn btn-secondary btn-sm" onclick="Admin.acceptCheck('${r.id}')" title="Nhận giá vốn hệ thống làm giá mua chuẩn mới">✔ Nhận vốn HT</button>
             <button class="btn btn-secondary btn-sm" style="color:var(--accent-rose);" onclick="Admin.deleteCheck('${r.id}')">🗑️</button>
           </div></td>
-        </tr>`).join('');
-      if (!silent && bad.length) alert(`⚠️ ${bad.length} ca kiểm tra lệch giá chuẩn!`);
+        </tr>`;
+      }).join('');
+      if (!silent && bad.length) alert(`⚠️ ${bad.length} ca kiểm tra lệch giá mua từ Nhà Cung Cấp!`);
     } catch (e) { alert(e.message); }
   },
 
   async saveCheck(id) {
     const tr = document.querySelector(`#admin-checks-tbody tr[data-id="${id}"]`);
     try {
+      const costVal = tr.querySelector('.chk-expected-cost').value;
       await this.api(`/price-checks/${id}`, 'PUT', {
-        expected_price: tr.querySelector('.chk-expected').value,
+        expected_cost: costVal,
+        expected_price: costVal ? Math.round(Number(costVal) / 0.6) : null,
         tolerance_pct: tr.querySelector('.chk-tol').value
       });
       await this.runChecks(true);
+      alert('Đã cập nhật giá mua NCC chuẩn cho ca kiểm tra!');
     } catch (e) { alert(e.message); }
   },
 
   async acceptCheck(id) {
-    if (!confirm('Đặt giá hệ thống hiện tại làm giá chuẩn mới? Chỉ làm khi bạn đã đối chiếu và xác nhận giá này đúng.')) return;
-    try { await this.api(`/price-checks/${id}/accept`, 'POST'); await this.runChecks(true); }
-    catch (e) { alert(e.message); }
+    if (!confirm('Đặt giá vốn xưởng hệ thống hiện tại làm giá mua NCC chuẩn mới? Chỉ làm khi bạn đã đối chiếu hóa đơn/báo giá xưởng thực tế.')) return;
+    try {
+      await this.api(`/price-checks/${id}/accept`, 'POST');
+      await this.runChecks(true);
+      alert('Đã nhận giá vốn hệ thống làm giá mua chuẩn!');
+    } catch (e) { alert(e.message); }
   },
 
   async deleteCheck(id) {
@@ -385,12 +401,17 @@ window.Admin = {
     if (!calc) return alert('Chưa có kết quả tính giá hợp lệ để lưu.');
     const name = prompt('Tên ca kiểm tra:', `${input.productName} - SL ${input.quantity}`);
     if (!name) return;
-    const raw = prompt(`Giá bán CHUẨN (đ) đã đối chiếu tính tay/báo giá xưởng.\nĐể trống = dùng giá hệ thống hiện tại (${this.fmtMoney(calc.suggestedSellingPrice)}):`, '');
+    const raw = prompt(`Giá mua / Giá vốn xưởng CHUẨN từ NCC (đ):\nĐể trống = dùng giá vốn hệ thống hiện tại (${this.fmtMoney(calc.totalCost)}):`, '');
     if (raw === null) return;
-    const expected = raw.replace(/[^\d]/g, '');
+    const expectedCost = raw.replace(/[^\d]/g, '');
     try {
-      await this.api('/price-checks', 'POST', { name, input, expected_price: expected === '' ? undefined : Number(expected) });
-      alert('Đã thêm ca kiểm tra! Xem tại Quản Trị → Kiểm Tra & Lịch Sử Giá.');
+      await this.api('/price-checks', 'POST', {
+        name,
+        input,
+        expected_cost: expectedCost === '' ? calc.totalCost : Number(expectedCost),
+        expected_price: calc.suggestedSellingPrice
+      });
+      alert('Đã thêm ca kiểm tra so sánh giá mua NCC! Xem tại Quản Trị → Kiểm Tra & Lịch Sử Giá.');
     } catch (e) { alert(e.message); }
   },
 
