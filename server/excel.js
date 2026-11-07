@@ -483,16 +483,20 @@ router.get('/supplier-jobs/export', async (req, res) => {
       JOIN orders o ON oi.order_id = o.id
       JOIN customers c ON o.customer_id = c.id
       LEFT JOIN suppliers s ON oi.supplier_id = s.id
-      WHERE oi.supplier_id IS NOT NULL
+      WHERE o.type = 'ORDER'
     `;
     const params = [];
     if (supplier_id && supplier_id !== 'ALL') {
-      query += ` AND oi.supplier_id = ?`;
-      params.push(supplier_id);
+      if (supplier_id === 'UNASSIGNED') {
+        query += ` AND (oi.supplier_id IS NULL OR oi.supplier_id = '')`;
+      } else {
+        query += ` AND oi.supplier_id = ?`;
+        params.push(supplier_id);
+      }
     }
     if (status && status !== 'ALL') {
       if (status === 'PENDING') {
-        query += ` AND oi.status = 'PENDING' AND o.status NOT IN ('PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED', 'CANCELLED')`;
+        query += ` AND oi.status = 'PENDING' AND o.status NOT IN ('COMPLETED', 'CANCELLED')`;
       } else {
         query += ` AND oi.status = ?`;
         params.push(status);

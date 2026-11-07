@@ -2986,6 +2986,12 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
 
   async sendJobToSupplier(itemId) {
+    // Tìm thông tin item để kiểm tra xem đã có xưởng chưa
+    const job = (this.state.supplierJobs || []).find(j => j.id === itemId);
+    if (job && !job.supplier_id) {
+      alert('Ấn phẩm này chưa được gán xưởng gia công! Vui lòng sửa đơn hàng để chọn xưởng trước khi gửi.');
+      return;
+    }
     if (!confirm('Xác nhận GỬI XƯỞNG cho lệnh in này? (Trạng thái sẽ chuyển sang Đang in xưởng)')) return;
     try {
       const res = await fetch(`/api/suppliers/jobs/${itemId}/status`, {
@@ -2998,6 +3004,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         throw new Error(err.error || 'Lỗi gửi xưởng');
       }
       alert('Đã gửi lệnh qua xưởng in thành công!');
+      await this.loadSupplierJobs();
       await this.loadSuppliers();
       this.loadDashboard();
       this.loadOrders();
