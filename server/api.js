@@ -288,6 +288,69 @@ router.patch('/suppliers/jobs/:id/status', (req, res) => {
   }
 });
 
+// Gán xưởng hàng loạt và tùy chọn gửi xưởng
+router.post('/suppliers/jobs/batch-assign-and-send', (req, res) => {
+  try {
+    const { item_ids, supplier_id, send_now } = req.body;
+
+    if (!Array.isArray(item_ids) || item_ids.length === 0) {
+      return res.status(400).json({ error: 'Vui lòng chọn ít nhất 1 lệnh in' });
+    }
+    if (!supplier_id) {
+      return res.status(400).json({ error: 'Vui lòng chọn xưởng in cần gán' });
+    }
+
+    const supplier = db.prepare('SELECT id, name FROM suppliers WHERE id = ?').get(supplier_id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Không tìm thấy xưởng in được chọn' });
+    }
+
+    const placeholders = item_ids.map(() => '?').join(',');
+    const items = db.prepare(`SELECT id, order_id, status FROM order_items WHERE id IN (${placeholders})`).all(...item_ids);
+
+    if (items.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy các hạng mục được chọn' });
+    }
+
+    const updateSupplierStmt = db.prepare('UPDATE order_items SET supplier_id = ? WHERE id = ?');
+    const updatePrintingStmt = db.prepare("UPDATE order_items SET supplier_id = ?, status = 'PRINTING' WHERE id = ?");
+    const checkOrderStmt = db.prepare("SELECT status FROM orders WHERE id = ?");
+    const updateOrderStmt = db.prepare("UPDATE orders SET status = 'IN_PRODUCTION', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+
+    const orderIds = new Set();
+    const transaction = db.transaction(() => {
+      for (const it of items) {
+        if (send_now) {
+          updatePrintingStmt.run(supplier_id, it.id);
+        } else {
+          updateSupplierStmt.run(supplier_id, it.id);
+        }
+        orderIds.add(it.order_id);
+      }
+
+      if (send_now) {
+        for (const orderId of orderIds) {
+          const order = checkOrderStmt.get(orderId);
+          if (order && ['DRAFT', 'ORDER_CONFIRMED', 'QUOTE_SENT'].includes(order.status)) {
+            updateOrderStmt.run(orderId);
+          }
+        }
+      }
+    });
+
+    transaction();
+
+    res.json({
+      success: true,
+      count: items.length,
+      supplier_name: supplier.name,
+      sent_to_supplier: !!send_now
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Gửi xưởng hàng loạt (gôm nhóm theo danh sách item_ids hoặc theo supplier_id)
 router.post('/suppliers/jobs/batch-send', (req, res) => {
   try {

@@ -15,6 +15,7 @@ const App = {
     settings: {}, // Cấu hình công ty (hotline, tên cty...)
     supplierJobs: [], // Cache danh sách lệnh in của xưởng
     supplierJobsView: 'grouped', // 'grouped' hoặc 'flat'
+    selectedJobIds: new Set(), // Danh sách ID các lệnh in được chọn để gán/gửi xưởng hàng loạt
     ordersViewMode: localStorage.getItem('orders_view_mode') || 'cards', // 'cards' (Thẻ Thông Minh) hoặc 'table' (Bảng chi tiết)
     filters: {
       status: 'ALL',
@@ -2620,16 +2621,24 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       const jobs = await res.json();
       this.state.supplierJobs = jobs || [];
 
-      const isSales = (this.state.currentRole === 'SALES');
-      document.querySelectorAll('#supplier-jobs-table th.col-cost-profit').forEach(th => {
-        th.style.display = isSales ? 'none' : '';
-      });
+      // Đổ danh sách xưởng vào thanh gán hàng loạt nếu có
+      const batchAssignSupSelect = document.getElementById('batch-assign-supplier-select');
+      if (batchAssignSupSelect && this.state.suppliers && this.state.suppliers.length > 0) {
+        const curVal = batchAssignSupSelect.value;
+        batchAssignSupSelect.innerHTML = '<option value="">-- Chọn xưởng cần gán --</option>' +
+          this.state.suppliers.map(s => `<option value="${s.id}" ${curVal === s.id ? 'selected' : ''}>${s.name}</option>`).join('');
+      }
 
       const statusBadges = {
         PENDING: '<span class="badge badge-draft">Chờ gửi xưởng</span>',
         PRINTING: '<span class="badge badge-producing">Đang in xưởng</span>',
         DONE: '<span class="badge badge-completed">Đã xong</span>'
       };
+
+      const isSales = (this.state.currentRole === 'SALES');
+      document.querySelectorAll('#supplier-jobs-table th.col-cost-profit').forEach(th => {
+        th.style.display = isSales ? 'none' : '';
+      });
 
       // 1. RENDER DẠNG GÔM NHÓM THEO XƯỞNG
       if (groupedContainer) {
@@ -2647,7 +2656,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             if (!groups[sId]) {
               groups[sId] = {
                 supplier_id: j.supplier_id,
-                supplier_name: j.supplier_name || 'Chưa gán xưởng',
+                supplier_name: j.supplier_name || '⚠️ Chưa gán xưởng in',
                 supplier_phone: j.supplier_phone || '',
                 items: []
               };
@@ -2676,9 +2685,13 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 : '';
 
               const badgeHtml = statusBadges[j.status] || `<span class="badge badge-draft">${j.status}</span>`;
+              const isChecked = this.state.selectedJobIds.has(j.id);
 
               return `
                 <tr style="${j.status === 'PENDING' ? 'background:rgba(245, 158, 11, 0.04);' : ''}">
+                  <td style="width:38px; text-align:center;">
+                    <input type="checkbox" class="job-item-checkbox" value="${j.id}" ${isChecked ? 'checked' : ''} onchange="App.onJobItemCheckChange('${j.id}', this.checked)">
+                  </td>
                   <td>
                     <strong style="color:var(--primary-light);">${j.order_code}</strong>
                     <div style="font-size:11px; color:var(--text-dim);">${orderDate}</div>
@@ -2719,7 +2732,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border-subtle);">
                   <div>
                     <div style="display:flex; align-items:center; gap:10px;">
-                      <h3 style="font-size:16px; font-weight:700; color:var(--accent-amber); margin:0;">🏭 ${g.supplier_name}</h3>
+                      <h3 style="font-size:16px; font-weight:700; color:${g.supplier_id ? 'var(--accent-amber)' : 'var(--accent-rose)'}; margin:0;">🏭 ${g.supplier_name}</h3>
                       ${g.supplier_phone ? `<span style="font-size:12px; color:var(--text-muted);">📞 ${g.supplier_phone}</span>` : ''}
                     </div>
                     <div style="font-size:12px; color:var(--text-dim); margin-top:4px;">
@@ -2748,6 +2761,9 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                   <table class="data-table" style="margin-bottom:0;">
                     <thead>
                       <tr>
+                        <th style="width:38px; text-align:center;">
+                          <input type="checkbox" onchange="App.toggleSelectGroupJobs('${safeSupId}', this.checked)" title="Chọn tất cả lệnh của xưởng này">
+                        </th>
                         <th>Mã Đơn / Ngày</th>
                         <th>Tên Ấn Phẩm & Quy Cách</th>
                         <th style="text-align: center;">SL</th>
@@ -2772,7 +2788,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       // 2. RENDER DẠNG BẢNG PHẲNG (FLAT)
       if (tbody) {
         if (!jobs || jobs.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--text-muted);">Không có lệnh chuyển qua xưởng nào phù hợp bộ lọc</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:24px; color:var(--text-muted);">Không có lệnh chuyển qua xưởng nào phù hợp bộ lọc</td></tr>`;
         } else {
           tbody.innerHTML = jobs.map(j => {
             const fileHtml = j.file_url
@@ -2788,16 +2804,20 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               : '';
 
             const badgeHtml = statusBadges[j.status] || `<span class="badge badge-draft">${j.status}</span>`;
+            const isChecked = this.state.selectedJobIds.has(j.id);
 
             return `
               <tr>
+                <td style="width:38px; text-align:center;">
+                  <input type="checkbox" class="job-item-checkbox" value="${j.id}" ${isChecked ? 'checked' : ''} onchange="App.onJobItemCheckChange('${j.id}', this.checked)">
+                </td>
                 <td class="cell-nowrap">
                   <strong style="color:var(--primary-light);">${j.order_code}</strong>
                   <div style="font-size:11px; color:var(--text-dim);">${orderDate}</div>
                   <div style="font-size:11px; color:var(--text-muted); max-width: 130px;" class="cell-ellipsis" title="${j.customer_name || ''}">${j.customer_name || ''}</div>
                 </td>
                 <td style="min-width: 130px; max-width: 170px;" class="cell-wrap">
-                  <strong style="color:var(--accent-amber);">${j.supplier_name || 'Chưa gán xưởng'}</strong>
+                  <strong style="color:${j.supplier_id ? 'var(--accent-amber)' : 'var(--accent-rose)'};">${j.supplier_name || '⚠️ Chưa gán xưởng'}</strong>
                   ${j.supplier_phone ? `<div style="font-size:11px; color:var(--text-dim);">📞 ${j.supplier_phone}</div>` : ''}
                 </td>
                 <td style="min-width: 180px; max-width:240px;" class="cell-wrap">
@@ -2831,10 +2851,113 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           }).join('');
         }
       }
+
+      this.updateSupplierJobsBatchBar();
     } catch (err) {
       console.error('Error loading supplier jobs:', err);
       if (groupedContainer) groupedContainer.innerHTML = `<div style="text-align:center; padding:20px; color:var(--accent-rose);">Lỗi khi tải danh sách lệnh in: ${err.message}</div>`;
-      if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--accent-rose);">Lỗi khi tải danh sách lệnh in: ${err.message}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:20px; color:var(--accent-rose);">Lỗi khi tải danh sách lệnh in: ${err.message}</td></tr>`;
+    }
+  },
+
+  // Xử lý tick chọn checkbox từng item lệnh in
+  onJobItemCheckChange(itemId, isChecked) {
+    if (isChecked) {
+      this.state.selectedJobIds.add(itemId);
+    } else {
+      this.state.selectedJobIds.delete(itemId);
+    }
+    this.updateSupplierJobsBatchBar();
+  },
+
+  // Chọn hoặc bỏ chọn toàn bộ trong bảng phẳng
+  toggleSelectAllFlatJobs(isChecked) {
+    (this.state.supplierJobs || []).forEach(j => {
+      if (isChecked) this.state.selectedJobIds.add(j.id);
+      else this.state.selectedJobIds.delete(j.id);
+    });
+    document.querySelectorAll('.job-item-checkbox').forEach(cb => { cb.checked = isChecked; });
+    this.updateSupplierJobsBatchBar();
+  },
+
+  // Chọn hoặc bỏ chọn toàn bộ trong 1 nhóm xưởng
+  toggleSelectGroupJobs(supplierId, isChecked) {
+    (this.state.supplierJobs || []).forEach(j => {
+      const sId = (j.supplier_id || 'unassigned').replace(/'/g, '');
+      if (sId === supplierId) {
+        if (isChecked) this.state.selectedJobIds.add(j.id);
+        else this.state.selectedJobIds.delete(j.id);
+      }
+    });
+    this.loadSupplierJobs();
+  },
+
+  // Xóa danh sách đã chọn
+  clearSupplierJobsSelection() {
+    this.state.selectedJobIds.clear();
+    document.querySelectorAll('.job-item-checkbox').forEach(cb => { cb.checked = false; });
+    const checkAllFlat = document.getElementById('check-all-flat-jobs');
+    if (checkAllFlat) checkAllFlat.checked = false;
+    this.updateSupplierJobsBatchBar();
+  },
+
+  // Cập nhật thanh Batch Bar
+  updateSupplierJobsBatchBar() {
+    const bar = document.getElementById('supplier-jobs-batch-bar');
+    const countEl = document.getElementById('supplier-jobs-selected-count');
+    const count = this.state.selectedJobIds.size;
+
+    if (countEl) countEl.textContent = count;
+    if (bar) {
+      bar.style.display = count > 0 ? 'flex' : 'none';
+    }
+  },
+
+  // Thực thi gán xưởng / gán & gửi xưởng hàng loạt
+  async executeBatchAssign(sendNow = false) {
+    const itemIds = Array.from(this.state.selectedJobIds);
+    if (!itemIds.length) {
+      alert('Vui lòng chọn ít nhất 1 lệnh in để thực hiện!');
+      return;
+    }
+
+    const select = document.getElementById('batch-assign-supplier-select');
+    const supplierId = select ? select.value : '';
+    if (!supplierId) {
+      alert('Vui lòng chọn xưởng in cần gán từ danh sách!');
+      if (select) select.focus();
+      return;
+    }
+
+    const supplierName = select.selectedOptions[0]?.text || 'Xưởng đã chọn';
+    const actionText = sendNow ? 'GÁN VÀ GỬI XƯỞNG NGAY' : 'GÁN VÀO XƯỞNG';
+
+    if (!confirm(`Xác nhận ${actionText} cho ${itemIds.length} lệnh in đã chọn sang [${supplierName}]?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/suppliers/jobs/batch-assign-and-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_ids: itemIds,
+          supplier_id: supplierId,
+          send_now: sendNow
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi thao tác hàng loạt');
+
+      alert(`✅ Thành công! Đã ${sendNow ? 'gán và gửi' : 'gán'} ${data.count} lệnh in sang [${supplierName}].`);
+      this.clearSupplierJobsSelection();
+      await this.loadSupplierJobs();
+      await this.loadSuppliers();
+      this.loadDashboard();
+      this.loadOrders();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
     }
   },
 
