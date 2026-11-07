@@ -185,6 +185,72 @@
             </div>
           </div>
 
+          <!-- ==================== THANH CẢNH BÁO ĐIỀU HÀNH & THEO DÕI ĐƠN HÀNG ==================== -->
+          <div class="alert-dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <!-- Cảnh báo 1: Đơn chưa hoàn tất -->
+            <div class="alert-box-card" onclick="App.filterOrdersAlert('UNCOMPLETED')" style="cursor: pointer; background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(245, 158, 11, 0.04)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(239, 68, 68, 0.15); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                  ⏳
+                </div>
+                <div>
+                  <div style="font-size: 13px; font-weight: 700; color: var(--accent-rose); display: flex; align-items: center; gap: 6px;">
+                    Đơn Chưa Hoàn Tất
+                    <span id="alert-uncompleted-count" class="badge badge-unpaid" style="font-size: 11px; padding: 2px 7px;">0</span>
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">
+                    Đang sản xuất, giao hàng hoặc chờ xử lý
+                  </div>
+                </div>
+              </div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--accent-rose);">
+                Xem ➔
+              </div>
+            </div>
+
+            <!-- Cảnh báo 2: Đơn chưa giao -->
+            <div class="alert-box-card" onclick="App.filterOrdersAlert('UNDELIVERED')" style="cursor: pointer; background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(2, 132, 199, 0.04)); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: var(--radius-lg); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                  🚚
+                </div>
+                <div>
+                  <div style="font-size: 13px; font-weight: 700; color: var(--primary-light); display: flex; align-items: center; gap: 6px;">
+                    Đơn Chưa Giao / Chờ Giao
+                    <span id="alert-undelivered-count" class="badge badge-delivering" style="font-size: 11px; padding: 2px 7px;">0</span>
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">
+                    Xưởng xong hoặc đang vận chuyển đến khách
+                  </div>
+                </div>
+              </div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--primary-light);">
+                Xem ➔
+              </div>
+            </div>
+
+            <!-- Cảnh báo 3: Đơn còn nợ tiền -->
+            <div class="alert-box-card" onclick="App.filterOrdersAlert('UNPAID')" style="cursor: pointer; background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.04)); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-lg); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(245, 158, 11, 0.15); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                  💳
+                </div>
+                <div>
+                  <div style="font-size: 13px; font-weight: 700; color: var(--accent-amber); display: flex; align-items: center; gap: 6px;">
+                    Đơn Còn Nợ Tiền
+                    <span id="alert-unpaid-count" class="badge badge-partial" style="font-size: 11px; padding: 2px 7px;">0</span>
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">
+                    Tổng nợ: <strong id="alert-unpaid-amount" style="color: var(--accent-amber);">0 đ</strong>
+                  </div>
+                </div>
+              </div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--accent-amber);">
+                Thu nợ ➔
+              </div>
+            </div>
+          </div>
+
           <!-- Quick Banner for 30s Speed -->
           <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.15), rgba(56, 189, 248, 0.05)); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
             <div>
@@ -200,12 +266,12 @@
             </div>
           </div>
 
-          <!-- Hai cột: Đơn hàng mới & Tải trọng xưởng in -->
-          <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px;">
+          <!-- Khu vực chính Dashboard: Đơn hàng gần nhất & Xưởng in / Dòng tiền -->
+          <div id="dashboard-main-grid" style="display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(320px, 1.2fr); gap: 20px; align-items: start;">
             <!-- Cột trái: Đơn hàng mới nhất -->
             <div class="card-panel" style="margin-bottom: 0;">
               <div class="panel-header">
-                <h2 class="panel-title">📋 Đơn Hàng & Báo Giá Gần Nhất</h2>
+                <h2 class="panel-title">📋 Đơn Hàng &amp; Báo Giá Gần Nhất</h2>
                 <button class="btn btn-secondary btn-sm" onclick="App.switchTab('orders')">Xem Tất Cả ➔</button>
               </div>
               <div class="table-responsive">
@@ -228,11 +294,11 @@
             </div>
 
             <!-- Cột phải: Xưởng gia công & Dòng tiền -->
-            <div id="dashboard-workshop-col" style="display: flex; flex-direction: column; gap: 24px;">
+            <div id="dashboard-workshop-col" style="display: flex; flex-direction: column; gap: 20px; min-width: 0;">
               <div class="card-panel" style="margin-bottom: 0;">
                 <div class="panel-header">
                   <h2 class="panel-title">🏭 Tiến Độ Các Xưởng In</h2>
-                  <button class="btn btn-secondary btn-sm" onclick="App.switchTab('suppliers')">Xem Chi Tiết</button>
+                  <button class="btn btn-secondary btn-sm" onclick="App.switchTab('suppliers')">Xem Chi Tiết ➔</button>
                 </div>
                 <div id="dashboard-suppliers-list" style="display: flex; flex-direction: column; gap: 10px;">
                   <!-- Injected via JS -->
@@ -241,16 +307,18 @@
 
               <div class="card-panel" style="margin-bottom: 0;">
                 <div class="panel-header">
-                  <h2 class="panel-title">💳 Dòng Tiền Thu Chi Thực Tế</h2>
+                  <h2 class="panel-title">💳 Dòng Tiền Thu Chi</h2>
                   <button class="btn btn-secondary btn-sm" onclick="App.switchTab('finance')">Sổ Quỹ ➔</button>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
-                  <span style="color: var(--text-muted);">Tổng Thu (Cọc & Tất toán):</span>
-                  <span id="dash-cashflow-in" style="font-weight: 700; color: var(--accent-green);">0 đ</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                  <span style="color: var(--text-muted);">Tổng Chi (Xưởng & Vật tư):</span>
-                  <span id="dash-cashflow-out" style="font-weight: 700; color: var(--accent-rose);">0 đ</span>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                  <div style="background: var(--bg-elevated); padding: 12px; border-radius: var(--radius-md); border-left: 3px solid var(--accent-green);">
+                    <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 4px;">Thu Thực Tế</div>
+                    <div id="dash-cashflow-in" style="font-weight: 700; font-size: 14px; color: var(--accent-green);">0 đ</div>
+                  </div>
+                  <div style="background: var(--bg-elevated); padding: 12px; border-radius: var(--radius-md); border-left: 3px solid var(--accent-rose);">
+                    <div style="font-size: 11.5px; color: var(--text-muted); margin-bottom: 4px;">Chi Xưởng &amp; Vận Hành</div>
+                    <div id="dash-cashflow-out" style="font-weight: 700; font-size: 14px; color: var(--accent-rose);">0 đ</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -556,17 +624,87 @@
                 <div class="col-cost-profit" style="font-size: 12px; color: var(--accent-green); margin-top: 6px;" id="res-profit-margin"></div>
               </div>
 
-              <div style="display:flex; gap:8px; margin-top: 18px;">
-                <button class="btn btn-secondary" id="btn-copy-pricing-quote" style="flex:1; padding: 12px; font-size: 13.5px; font-weight:600;" onclick="App.copyPricingQuote()">
-                  📋 COPY BÁO GIÁ CHO KHÁCH
+              <div style="display:flex; gap:8px; margin-top: 18px; flex-wrap: wrap;">
+                <button class="btn btn-secondary" id="btn-copy-pricing-quote" style="flex:1; min-width: 160px; padding: 11px; font-size: 13px; font-weight:600;" onclick="App.copyPricingQuote()">
+                  📋 COPY BÁO GIÁ
                 </button>
-                <button class="btn btn-primary" id="btn-apply-to-order" style="flex:1.2; padding: 12px; font-size: 13.5px;">
+                <button class="btn btn-accent" id="btn-add-to-multi-calc" style="flex:1; min-width: 170px; padding: 11px; font-size: 13px; font-weight:700;" onclick="App.addCurrentItemToMultiCart()">
+                  ➕ THÊM VÀO GIỎ TÍNH GIÁ
+                </button>
+                <button class="btn btn-primary" id="btn-apply-to-order" style="flex:1.2; min-width: 180px; padding: 11px; font-size: 13px;">
                   👉 ĐƯA VÀO ĐƠN HÀNG
                 </button>
               </div>
               <button class="btn btn-secondary" id="btn-save-price-check" style="display:none; margin-top: 8px; width: 100%;" onclick="Admin.saveCheckFromPricing()">
                 🧪 Lưu thành ca kiểm tra giá (Admin)
               </button>
+            </div>
+          </div>
+
+          <!-- ==================== KHU VỰC TÍNH GIÁ NHIỀU MÓN (MULTI-ITEM CART) ==================== -->
+          <div id="multi-pricing-card" class="card-panel" style="margin-top: 24px; border: 1px solid rgba(56, 189, 248, 0.35); background: linear-gradient(180deg, rgba(15, 23, 42, 0.7), rgba(2, 132, 199, 0.05));">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <h3 class="panel-title" style="color: var(--primary-light);">
+                  🛒 Danh Sách Nhiều Món Đang Tính Giá
+                </h3>
+                <span id="multi-calc-badge-count" class="badge badge-confirmed" style="font-size: 12px; padding: 3px 8px;">0 món</span>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="App.clearMultiCart()" style="color: var(--accent-rose);">
+                  🗑️ Xóa Tất Cả
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="App.copyMultiPricingQuote()" title="Copy báo giá tổng hợp tất cả món">
+                  📋 Copy Toàn Bộ Báo Giá
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="App.transferMultiToOrder()" style="font-weight: 700;">
+                  🚀 Tạo Đơn Hàng Nhiều Món Này ➔
+                </button>
+              </div>
+            </div>
+
+            <!-- Bảng danh sách các món -->
+            <div class="table-responsive" style="margin-top: 10px;">
+              <table class="data-table" id="multi-pricing-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px; text-align: center;">STT</th>
+                    <th style="min-width: 180px;">Ấn Phẩm &amp; Quy Cách Kỹ Thuật</th>
+                    <th style="width: 90px; text-align: center;">Số Lượng</th>
+                    <th style="width: 80px; text-align: center;">ĐVT</th>
+                    <th class="col-cost-profit" style="min-width: 110px; text-align: right; color: var(--accent-amber);">Vốn Xưởng</th>
+                    <th style="min-width: 120px; text-align: right; color: var(--primary-light);">Giá Bán (đ)</th>
+                    <th class="col-cost-profit" style="min-width: 100px; text-align: right; color: var(--accent-green);">Lợi Nhuận</th>
+                    <th class="rbac-admin-only" style="min-width: 130px;">Xưởng Làm</th>
+                    <th style="width: 70px; text-align: center;">Xóa</th>
+                  </tr>
+                </thead>
+                <tbody id="multi-pricing-tbody">
+                  <tr>
+                    <td colspan="9" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                      Chưa có món nào trong giỏ tính giá. Hãy điều chỉnh thông số ở trên và bấm <strong>"➕ THÊM VÀO GIỎ TÍNH GIÁ"</strong>.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Tổng kết tài chính giỏ nhiều món -->
+            <div style="display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle);">
+              <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap; font-size: 13.5px;">
+                <div class="col-cost-profit">
+                  <span style="color: var(--text-muted);">Tổng Vốn Xưởng: </span>
+                  <strong id="multi-total-cost" style="color: var(--accent-amber); font-size: 15px;">0 đ</strong>
+                </div>
+                <div class="col-cost-profit">
+                  <span style="color: var(--text-muted);">Tổng Lợi Nhuận: </span>
+                  <strong id="multi-total-profit" style="color: var(--accent-green); font-size: 15px;">0 đ</strong>
+                </div>
+                <div style="background: rgba(2, 132, 199, 0.15); padding: 8px 16px; border-radius: var(--radius-md); border: 1px solid rgba(56, 189, 248, 0.3);">
+                  <span style="color: var(--text-muted);">TỔNG GIÁ BÁN CHO KHÁCH: </span>
+                  <strong id="multi-total-selling" style="color: var(--primary-light); font-size: 18px; font-weight: 800;">0 đ</strong>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -580,13 +718,15 @@
                 <!-- Filter Tabs -->
                 <div class="filter-tabs" style="margin-bottom: 0;">
                   <button class="filter-btn active" data-filter-status="ALL">Tất Cả</button>
-                  <button class="filter-btn" data-filter-type="QUOTE">Báo Giá</button>
-                  <button class="filter-btn" data-filter-status="ORDER_CONFIRMED">Đã Chốt</button>
-                  <button class="filter-btn" data-filter-status="IN_PRODUCTION">Đang In Xưởng</button>
-                  <button class="filter-btn" data-filter-status="PRODUCED">Xưởng Xong</button>
+                  <button class="filter-btn" data-filter-type="QUOTE" style="font-weight: 600;">📑 Báo Giá</button>
+                  <button class="filter-btn" data-filter-status="ORDER_CONFIRMED">⏳ Chờ In</button>
+                  <button class="filter-btn" data-filter-status="IN_PRODUCTION">🏭 Đang In Xưởng</button>
+                  <button class="filter-btn" data-filter-status="PRODUCED">📦 Đã Có Hàng</button>
                   <button class="filter-btn" data-filter-status="DELIVERING">🚚 Đang Giao</button>
-                  <button class="filter-btn" data-filter-status="DELIVERED">📦 Đã Giao</button>
-                  <button class="filter-btn" data-filter-status="COMPLETED">Hoàn Thành</button>
+                  <button class="filter-btn" data-filter-status="COMPLETED">✅ Hoàn Tất</button>
+                  <span style="display:inline-block; width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px; vertical-align: middle;"></span>
+                  <button class="filter-btn" data-filter-alert="UNDELIVERED" style="color: var(--primary-light); font-weight: 600;">🚚 Chờ/Đang Giao</button>
+                  <button class="filter-btn" data-filter-alert="UNPAID" style="color: var(--accent-amber); font-weight: 600;">💳 Còn Nợ Tiền</button>
                 </div>
               </div>
               <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -768,9 +908,9 @@
 
         <!-- ==================== TAB 6: TÀI CHÍNH & CÔNG NỢ ==================== -->
         <section class="tab-view" id="tab-finance">
-          <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px;">
+          <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); gap: 20px; align-items: start;">
             <!-- Sổ công nợ phải thu của khách hàng -->
-            <div class="card-panel">
+            <div class="card-panel" style="margin-bottom: 0;">
               <div class="panel-header">
                 <div>
                   <h2 class="panel-title">⏳ Sổ Công Nợ Phải Thu (AR) Theo Khách Hàng</h2>
@@ -783,12 +923,12 @@
                 <table class="data-table" id="finance-debt-table">
                   <thead>
                     <tr>
-                      <th>Khách Hàng</th>
-                      <th>Số Đơn Nợ</th>
-                      <th>Tổng Tiền Đã Đặt</th>
-                      <th>Đã Cọc</th>
-                      <th>Còn Nợ</th>
-                      <th>Thao Tác</th>
+                      <th style="min-width: 140px;">Khách Hàng</th>
+                      <th style="text-align: center; width: 80px;">Số Đơn</th>
+                      <th style="text-align: right; min-width: 100px;">Tổng Đã Đặt</th>
+                      <th style="text-align: right; min-width: 90px;">Đã Cọc</th>
+                      <th style="text-align: right; min-width: 100px;">Còn Nợ</th>
+                      <th style="text-align: center; width: 110px;">Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1000,8 +1140,8 @@
             </div>
           </div>
 
-          <!-- Nhóm 2 & 3: Top Khách hàng 80/20 & Phân bổ Xưởng in (2 Cột) -->
-          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-bottom: 24px;">
+          <!-- Nhóm 2 & 3: Top Khách hàng 80/20 & Phân bổ Xưởng in (2 Cột cân đối) -->
+          <div style="display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr); gap: 20px; margin-bottom: 24px; align-items: start;">
             <!-- Top Khách Hàng -->
             <div class="card-panel" style="margin-bottom: 0;">
               <div class="panel-header">
@@ -1016,11 +1156,11 @@
                 <table class="data-table" id="mgmt-cust-table">
                   <thead>
                     <tr>
-                      <th>Khách Hàng</th>
-                      <th style="text-align: center;">Đơn</th>
-                      <th style="text-align: right;">Doanh Thu</th>
-                      <th style="text-align: right; color:var(--accent-green);">Lợi Nhuận</th>
-                      <th style="text-align: right; color:var(--accent-rose);">Còn Nợ</th>
+                      <th style="min-width: 160px;">Khách Hàng</th>
+                      <th style="text-align: center; width: 60px;">Đơn</th>
+                      <th style="text-align: right; min-width: 110px;">Doanh Thu</th>
+                      <th style="text-align: right; color:var(--accent-green); min-width: 100px;">Lợi Nhuận</th>
+                      <th style="text-align: right; color:var(--accent-rose); min-width: 100px;">Còn Nợ</th>
                     </tr>
                   </thead>
                   <tbody id="mgmt-cust-tbody">
@@ -1031,7 +1171,7 @@
             </div>
 
             <!-- Chi Phí Xưởng Gia Công & Điều Phối -->
-            <div class="card-panel" style="margin-bottom: 0;">
+            <div class="card-panel" style="margin-bottom: 0; min-width: 0;">
               <div class="panel-header">
                 <div>
                   <h3 class="panel-title">🏭 3. Chi Phí Gia Công &amp; Điều Phối Xưởng</h3>
@@ -1044,10 +1184,10 @@
                 <table class="data-table" id="mgmt-sup-table">
                   <thead>
                     <tr>
-                      <th>Xưởng In / NCC</th>
-                      <th style="text-align: center;">Hạng Mục</th>
-                      <th style="text-align: right; color:var(--accent-amber);">Tiền Gia Công</th>
-                      <th style="text-align: right;">Giá Bán Ra</th>
+                      <th style="min-width: 140px;">Xưởng In / NCC</th>
+                      <th style="text-align: center; width: 70px;">Số Món</th>
+                      <th style="text-align: right; color:var(--accent-amber); min-width: 110px;">Tiền Gia Công</th>
+                      <th style="text-align: right; min-width: 100px;">Giá Bán Ra</th>
                     </tr>
                   </thead>
                   <tbody id="mgmt-sup-tbody">
@@ -1059,7 +1199,7 @@
           </div>
 
           <!-- Nhóm 4 & 5: Dòng tiền thực tế & Cơ cấu nhóm khách hàng -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px;">
             <!-- Cơ cấu nhóm khách hàng -->
             <div class="card-panel">
               <div class="panel-header">
@@ -1625,10 +1765,9 @@
           <div class="form-group">
             <label class="form-label">Trạng Thái Đơn Hàng / Vận Chuyển *</label>
             <select id="delivery-form-status" class="form-control">
-              <option value="PRODUCED">Xưởng Đã Xong (Chờ giao)</option>
+              <option value="PRODUCED">📦 Đã Có Hàng (Sẵn sàng giao)</option>
               <option value="DELIVERING" selected>🚚 Đang Giao Hàng</option>
-              <option value="DELIVERED">📦 Đã Giao Thành Công</option>
-              <option value="COMPLETED">✅ Hoàn Thành Đơn</option>
+              <option value="COMPLETED">✅ Đã Giao - Hoàn Tất Đơn</option>
             </select>
           </div>
           <div class="form-group">

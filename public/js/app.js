@@ -19,9 +19,11 @@ const App = {
     filters: {
       status: 'ALL',
       type: null,
+      alert: null,
       q: ''
     },
     currentPricingCalc: null,
+    multiPricingCart: [], // Giỏ tính giá nhiều món
     orderModalMode: 'CREATE',
     currentActiveOrderId: null,
     editingOrder: null,
@@ -150,13 +152,20 @@ const App = {
 
         const statusFilter = btn.getAttribute('data-filter-status');
         const typeFilter = btn.getAttribute('data-filter-type');
+        const alertFilter = btn.getAttribute('data-filter-alert');
 
-        if (statusFilter) {
+        if (alertFilter) {
+          this.state.filters.alert = alertFilter;
+          this.state.filters.status = 'ALL';
+          this.state.filters.type = null;
+        } else if (statusFilter) {
           this.state.filters.status = statusFilter;
           this.state.filters.type = null;
+          this.state.filters.alert = null;
         } else if (typeFilter) {
           this.state.filters.type = typeFilter;
           this.state.filters.status = 'ALL';
+          this.state.filters.alert = null;
         }
 
         this.loadOrders();
@@ -303,8 +312,8 @@ const App = {
     const producingCard = document.getElementById('card-stat-producing');
     if (producingCard) producingCard.style.display = isSales ? 'none' : '';
     // Điều chỉnh grid dashboard: Sales chỉ hiện 1 cột, Admin hiện 2 cột
-    const dashGrid = workshopCol?.parentElement;
-    if (dashGrid) dashGrid.style.gridTemplateColumns = isSales ? '1fr' : '1.6fr 1fr';
+    const dashGrid = document.getElementById('dashboard-main-grid') || workshopCol?.parentElement;
+    if (dashGrid) dashGrid.style.gridTemplateColumns = isSales ? '1fr' : 'minmax(0, 1.8fr) minmax(320px, 1.2fr)';
 
     // Refresh views to apply masking
     if (this.state.activeTab === 'orders') this.renderOrdersTable();
@@ -366,6 +375,19 @@ const App = {
       document.getElementById('stat-debt').textContent = this.formatCurrency(data.summary.total_receivable_debt);
       document.getElementById('stat-producing-count').textContent = data.summary.in_production_count;
 
+      // Cập nhật các chỉ số cảnh báo điều hành
+      const uncompletedEl = document.getElementById('alert-uncompleted-count');
+      if (uncompletedEl) uncompletedEl.textContent = data.summary.uncompleted_orders_count || 0;
+
+      const undeliveredEl = document.getElementById('alert-undelivered-count');
+      if (undeliveredEl) undeliveredEl.textContent = data.summary.undelivered_orders_count || 0;
+
+      const unpaidEl = document.getElementById('alert-unpaid-count');
+      if (unpaidEl) unpaidEl.textContent = data.summary.unpaid_orders_count || 0;
+
+      const unpaidAmtEl = document.getElementById('alert-unpaid-amount');
+      if (unpaidAmtEl) unpaidAmtEl.textContent = this.formatCurrency(data.summary.total_receivable_debt || 0);
+
       // Badge count
       const badgeCount = document.getElementById('badge-orders-count');
       if (badgeCount) badgeCount.textContent = data.summary.total_orders;
@@ -386,8 +408,8 @@ const App = {
       if (workshopCol) workshopCol.style.display = isSales ? 'none' : '';
       const producingCard = document.getElementById('card-stat-producing');
       if (producingCard) producingCard.style.display = isSales ? 'none' : '';
-      const dashGrid = workshopCol?.parentElement;
-      if (dashGrid) dashGrid.style.gridTemplateColumns = isSales ? '1fr' : '1.6fr 1fr';
+      const dashGrid = document.getElementById('dashboard-main-grid') || workshopCol?.parentElement;
+      if (dashGrid) dashGrid.style.gridTemplateColumns = isSales ? '1fr' : 'minmax(0, 1.8fr) minmax(320px, 1.2fr)';
     } catch (err) {
       console.error('Error loading dashboard:', err);
     }
@@ -480,15 +502,20 @@ const App = {
     const container = document.getElementById('dashboard-suppliers-list');
     if (!container) return;
 
+    if (!suppliers || suppliers.length === 0) {
+      container.innerHTML = `<div style="text-align:center; padding:16px; color:var(--text-muted); font-size:12px;">Chưa có dữ liệu xưởng in</div>`;
+      return;
+    }
+
     container.innerHTML = suppliers.map(s => `
-      <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-elevated); padding:10px 14px; border-radius:var(--radius-md);">
-        <div>
-          <div style="font-weight:600; font-size:13px;">${s.name}</div>
-          <div style="font-size:11px; color:var(--text-dim);">${s.specialties}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-elevated); padding:10px 14px; border-radius:var(--radius-md); gap:12px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600; font-size:13px; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${s.name}">${s.name}</div>
+          <div style="font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${s.specialties || ''}">${s.specialties || 'Gia công in'}</div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:12px; color:var(--text-muted);">${s.active_jobs} đơn đang chạy</span>
-          <span class="badge ${s.active_jobs > 0 ? 'badge-producing' : 'badge-draft'}">
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <span style="font-size:11.5px; color:var(--text-muted);">${s.active_jobs || 0} việc</span>
+          <span class="badge ${s.active_jobs > 0 ? 'badge-producing' : 'badge-draft'}" style="font-size:10.5px; padding:2px 8px;">
             ${s.active_jobs > 0 ? 'Đang In' : 'Rảnh'}
           </span>
         </div>
@@ -1074,6 +1101,245 @@ const App = {
       .trim();
   },
 
+  // Tạo đối tượng item từ kết quả tính giá hiện tại
+  buildCurrentPricingItem() {
+    if (!this.state.currentPricingCalc) return null;
+    const p = this.state.currentPricingCalc;
+    const input = this.collectPricingInput();
+    const supplierSelect = document.getElementById('calc-supplier');
+    const supplierId = supplierSelect ? supplierSelect.value : '';
+    const supplierName = supplierSelect && supplierSelect.selectedOptions[0] ? supplierSelect.selectedOptions[0].text : '';
+
+    let paper = '';
+    if (input.group === 'DIGITAL') paper = input.paper;
+    else if (input.group === 'OFFSET') paper = input.offsetProduct ? input.offsetVariant : `${input.paperType} ${input.gsm}gsm`;
+    else if (input.group === 'DOCUMENT_SPIRAL') paper = `Bìa: ${input.front?.paper || 'Ivory'} / Ruột: Fort 80gsm`;
+    else paper = input.material;
+
+    // Quy cách gửi khách hàng: loại bỏ thông tin kỹ thuật xưởng
+    let specs = `[${p.groupLabel}] ${this.cleanSpecsForCustomer(p.specs) || p.specs}`;
+    if (input.lamination && input.lamination !== 'NONE') specs += `, cán ${input.lamination.startsWith('MATTE') ? 'mờ' : 'bóng'} ${input.lamination.endsWith('_1S') ? '1' : '2'} mặt`;
+    if (input.finishing && input.finishing.length) specs += `, gia công: ${input.finishing.join(', ')}`;
+
+    // Thông tin kỹ thuật nội bộ xưởng & bình bài
+    const technicalWorkshopInfo = `[${p.specs}] | ${p.impositionNote || ''}`;
+
+    return {
+      id: 'cart_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      item_name: p.productName || 'Ấn phẩm in',
+      size: `${input.width || 0}x${input.height || 0}mm`,
+      quantity: p.quantity || 1,
+      unit: p.baseUnit || 'cái',
+      paper_gsm: paper,
+      specs,
+      imposition_info: technicalWorkshopInfo,
+      supplier_id: supplierId,
+      supplier_name: supplierName,
+      unit_cost: p.unitCost || 0,
+      total_cost: p.totalCost || 0,
+      unit_price: p.unitPrice || 0,
+      total_selling: p.suggestedSellingPrice || 0,
+      gross_profit: p.grossProfit || 0,
+      file_url: ''
+    };
+  },
+
+  // Thêm món hiện tại vào giỏ tính giá nhiều món
+  addCurrentItemToMultiCart() {
+    const item = this.buildCurrentPricingItem();
+    if (!item) {
+      alert('Vui lòng tính giá sản phẩm trước khi thêm vào giỏ!');
+      return;
+    }
+
+    this.state.multiPricingCart.push(item);
+    this.renderMultiPricingCart();
+
+    // Hiệu ứng cuộn nhẹ xuống giỏ nhiều món để người dùng thấy rõ
+    const cartEl = document.getElementById('multi-pricing-card');
+    if (cartEl) {
+      cartEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  },
+
+  // Xóa món khỏi giỏ tính giá
+  removeMultiCartItem(itemId) {
+    this.state.multiPricingCart = this.state.multiPricingCart.filter(it => it.id !== itemId);
+    this.renderMultiPricingCart();
+  },
+
+  // Xóa toàn bộ giỏ tính giá
+  clearMultiCart() {
+    if (this.state.multiPricingCart.length === 0) return;
+    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ danh sách tính giá nhiều món này?')) {
+      this.state.multiPricingCart = [];
+      this.renderMultiPricingCart();
+    }
+  },
+
+  // Render bảng danh sách nhiều món
+  renderMultiPricingCart() {
+    const tbody = document.getElementById('multi-pricing-tbody');
+    const badge = document.getElementById('multi-calc-badge-count');
+    const totalCostEl = document.getElementById('multi-total-cost');
+    const totalProfitEl = document.getElementById('multi-total-profit');
+    const totalSellingEl = document.getElementById('multi-total-selling');
+
+    const items = this.state.multiPricingCart || [];
+    if (badge) badge.textContent = `${items.length} món`;
+
+    const isSales = (this.state.currentRole === 'SALES');
+
+    if (!items.length) {
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 24px; color: var(--text-muted);">
+              Chưa có món nào trong giỏ tính giá. Hãy điều chỉnh thông số ở trên và bấm <strong>"➕ THÊM VÀO GIỎ TÍNH GIÁ"</strong>.
+            </td>
+          </tr>
+        `;
+      }
+      if (totalCostEl) totalCostEl.textContent = '0 đ';
+      if (totalProfitEl) totalProfitEl.textContent = '0 đ';
+      if (totalSellingEl) totalSellingEl.textContent = '0 đ';
+      return;
+    }
+
+    let sumCost = 0;
+    let sumSelling = 0;
+    let sumProfit = 0;
+
+    tbody.innerHTML = items.map((it, idx) => {
+      sumCost += (it.total_cost || (it.unit_cost * it.quantity));
+      sumSelling += (it.total_selling || (it.unit_price * it.quantity));
+      sumProfit += (it.gross_profit || (sumSelling - sumCost));
+
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: 700; color: var(--text-dim);">${idx + 1}</td>
+          <td style="max-width: 280px;" class="cell-wrap">
+            <strong style="color: var(--text-main); font-size: 13.5px;">${it.item_name}</strong>
+            <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">${it.specs || ''}</div>
+          </td>
+          <td style="text-align: center; font-weight: 700;" class="cell-nowrap">
+            ${this.formatNumber(it.quantity)}
+          </td>
+          <td style="text-align: center; color: var(--text-dim);" class="cell-nowrap">
+            ${it.unit}
+          </td>
+          <td class="col-cost-profit cell-nowrap" style="${isSales ? 'display:none;' : ''} text-align: right; color: var(--accent-amber); font-weight: 600;">
+            ${this.formatCurrency(it.total_cost || (it.unit_cost * it.quantity))}
+            <div style="font-size: 10.5px; color: var(--text-dim);">${this.formatCurrency(it.unit_cost)}/${it.unit}</div>
+          </td>
+          <td class="cell-nowrap" style="text-align: right; color: var(--primary-light); font-weight: 700;">
+            ${this.formatCurrency(it.total_selling || (it.unit_price * it.quantity))}
+            <div style="font-size: 10.5px; color: var(--text-dim);">${this.formatCurrency(it.unit_price)}/${it.unit}</div>
+          </td>
+          <td class="col-cost-profit cell-nowrap" style="${isSales ? 'display:none;' : ''} text-align: right; color: var(--accent-green); font-weight: 700;">
+            ${this.formatCurrency(it.gross_profit || ((it.unit_price - it.unit_cost) * it.quantity))}
+          </td>
+          <td class="rbac-admin-only cell-ellipsis" style="max-width: 140px;" title="${it.supplier_name || ''}">
+            <span style="font-size: 12px; color: var(--text-muted);">${it.supplier_name || 'Chưa gán'}</span>
+          </td>
+          <td style="text-align: center;" class="cell-nowrap">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App.removeMultiCartItem('${it.id}')" style="color: var(--accent-rose); padding: 2px 7px;" title="Xóa món này khỏi giỏ">✕</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    if (totalCostEl) totalCostEl.textContent = this.formatCurrency(sumCost);
+    if (totalProfitEl) totalProfitEl.textContent = this.formatCurrency(sumProfit);
+    if (totalSellingEl) totalSellingEl.textContent = this.formatCurrency(sumSelling);
+  },
+
+  // Chuyển toàn bộ danh sách nhiều món sang Modal tạo đơn hàng
+  transferMultiToOrder() {
+    if (!this.state.multiPricingCart || this.state.multiPricingCart.length === 0) {
+      alert('Chưa có món nào trong giỏ tính giá. Vui lòng bấm "➕ THÊM VÀO GIỎ TÍNH GIÁ" ít nhất 1 sản phẩm!');
+      return;
+    }
+
+    const orderItems = this.state.multiPricingCart.map(it => ({
+      item_name: it.item_name,
+      size: it.size,
+      quantity: it.quantity,
+      unit: it.unit,
+      paper_gsm: it.paper_gsm,
+      specs: it.specs,
+      imposition_info: it.imposition_info,
+      supplier_id: it.supplier_id,
+      unit_cost: it.unit_cost,
+      unit_price: it.unit_price,
+      file_url: it.file_url || ''
+    }));
+
+    this.openNewOrderModal({ items: orderItems });
+  },
+
+  // Copy báo giá tổng hợp nhiều món để gửi cho khách hàng qua Zalo
+  async copyMultiPricingQuote() {
+    const items = this.state.multiPricingCart || [];
+    if (!items.length) {
+      alert('Giỏ tính giá đang trống, chưa có món nào để copy!');
+      return;
+    }
+
+    const settings = this.state.settings || (window.Admin && Admin.settings) || {};
+    const companyName = settings.company_name || 'IN TIA CHỚP';
+    const currentUserPhone = this.state.currentUser?.phone;
+    const currentUserName = this.state.currentUser?.full_name;
+    const hotline = currentUserPhone || settings.company_hotline || '0917 667 937';
+    const supportContactText = currentUserPhone
+      ? `${currentUserPhone} (${currentUserName || 'Tư vấn viên'})`
+      : hotline;
+
+    let itemsText = items.map((it, idx) => {
+      const lineTotal = it.total_selling || (it.unit_price * it.quantity);
+      return `${idx + 1}. ${it.item_name.toUpperCase()}
+• Quy cách: ${it.specs}
+• Số lượng: ${this.formatNumber(it.quantity)} ${it.unit}
+• Đơn giá: ${this.formatCurrency(it.unit_price)} / ${it.unit}
+➔ Thành tiền: ${this.formatCurrency(lineTotal)}`;
+    }).join('\n\n');
+
+    let grandTotal = items.reduce((sum, it) => sum + (it.total_selling || (it.unit_price * it.quantity)), 0);
+
+    const quoteText = `BÁO GIÁ IN ẤN - ${companyName}
+━━━━━━━━━━━━━━━━━━━━━━
+Kính gửi Quý khách hàng,
+Dưới đây là chi tiết báo giá ${items.length} hạng mục in ấn:
+
+${itemsText}
+
+━━━━━━━━━━━━━━━━━━━━━━
+💵 TỔNG CỘNG (${items.length} MÓN): ${this.formatCurrency(grandTotal)} (chưa gồm VAT & ship)
+━━━━━━━━━━━━━━━━━━━━━━
+⏱️ Thời gian sản xuất: 1 - 2 ngày làm việc
+📞 Hotline / Zalo hỗ trợ: ${supportContactText}
+Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(quoteText);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = quoteText;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      alert('✅ ĐÃ COPY BÁO GIÁ TỔNG HỢP NHIỀU MÓN!\nBạn có thể dán (Paste/Ctrl+V) gửi ngay cho khách hàng qua Zalo/Email.');
+    } catch (e) {
+      alert('Không thể copy tự động: ' + e.message + '\n\nNội dung:\n' + quoteText);
+    }
+  },
+
   // Chuyển kết quả tính giá sang modal tạo đơn hàng (1 click)
   transferPricingToOrder() {
     if (!this.state.currentPricingCalc) return;
@@ -1202,13 +1468,32 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     }
   },
 
+  // Bấm nhanh từ Dashboard sang Tab Quản lý Đơn hàng với bộ lọc cảnh báo
+  filterOrdersAlert(alertType) {
+    this.state.filters.alert = alertType;
+    this.state.filters.status = 'ALL';
+    this.state.filters.type = null;
+
+    // Cập nhật giao diện nút filter tab trong Quản lý đơn hàng
+    document.querySelectorAll('#tab-orders .filter-btn').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.getAttribute('data-filter-alert') === alertType) {
+        btn.classList.add('active');
+      }
+    });
+
+    this.switchTab('orders');
+    this.loadOrders();
+  },
+
   // ==========================================
   // 3. ORDERS & QUOTES MANAGEMENT
   // ==========================================
   async loadOrders() {
     try {
-      const { status, type, q } = this.state.filters;
+      const { status, type, alert: alertFilter, q } = this.state.filters;
       let url = '/api/orders?';
+      if (alertFilter) url += `alert_filter=${encodeURIComponent(alertFilter)}&`;
       if (status && status !== 'ALL') url += `status=${encodeURIComponent(status)}&`;
       if (type) url += `type=${encodeURIComponent(type)}&`;
       if (q) url += `q=${encodeURIComponent(q)}&`;
@@ -1301,8 +1586,14 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           <a href="${firstItem.file_url}" target="_blank" style="color:var(--primary-light); text-decoration:none; font-weight:600;" title="Mở file in">🔗 Xem File In</a>
         ` : '<span style="color:var(--text-dim);">Chưa có file</span>';
 
+        // Phân tích trạng thái cảnh báo thông minh
+        const isUncompleted = o.type === 'ORDER' && !['COMPLETED', 'CANCELLED'].includes(o.status);
+        const isUndelivered = o.type === 'ORDER' && ['PRODUCED', 'DELIVERING'].includes(o.status);
+        const isUnpaid = o.type === 'ORDER' && o.payment_status !== 'PAID' && o.remaining_amount > 0;
+        const isOverdue = o.delivery_deadline && new Date(o.delivery_deadline) < new Date() && !['COMPLETED', 'CANCELLED'].includes(o.status);
+
         return `
-          <div class="order-smart-card">
+          <div class="order-smart-card" style="${isUnpaid ? 'border-left: 4px solid var(--accent-amber);' : (isUndelivered ? 'border-left: 4px solid var(--primary-light);' : '')}">
             <!-- Header: Mã đơn, Loại, Ngày lập -->
             <div class="order-card-header">
               <div class="order-card-code-area">
@@ -1312,7 +1603,9 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 </span>
                 <span class="order-card-date">📅 ${new Date(o.created_at).toLocaleDateString('vi-VN')}</span>
               </div>
-              <div>
+              <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                ${isOverdue ? '<span class="badge badge-unpaid" style="animation: pulse 1.5s infinite;" title="Đã quá hạn giao hàng cam kết">🚨 Quá Hạn Giao</span>' : ''}
+                ${isUndelivered ? `<span class="badge badge-delivering">${o.status === 'PRODUCED' ? '📦 Đã Có Hàng (Chờ giao)' : '🚚 Đang Đi Giao'}</span>` : ''}
                 ${o.payment_status === 'PAID' ? '<span class="badge badge-paid">Đã TT Đủ</span>' : (o.payment_status === 'PARTIAL' ? '<span class="badge badge-partial">Đã Cọc</span>' : '<span class="badge badge-unpaid">Chưa TT</span>')}
               </div>
             </div>
@@ -1377,15 +1670,16 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
             <!-- Trạng thái sản xuất & Vận chuyển -->
             <div class="order-card-status-bar">
               <div style="flex:1; min-width:180px;">
-                <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:12px; padding:4px 8px; width:100%; border-radius:var(--radius-sm);">
-                  <option value="DRAFT" ${o.status === 'DRAFT' ? 'selected' : ''}>Nháp</option>
-                  <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>Đã Gửi Báo Giá</option>
-                  <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>Đã Chốt Đơn</option>
-                  <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>Đang In Xưởng</option>
-                  <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>Xưởng Đã Xong</option>
+                <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:12px; padding:4px 8px; width:100%; border-radius:var(--radius-sm); font-weight:600;">
+                  ${o.type === 'QUOTE' ? `
+                    <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>📑 Đã Gửi Báo Giá</option>
+                  ` : ''}
+                  <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>⏳ Chờ In (Đã chốt)</option>
+                  <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>🏭 Đang In Xưởng</option>
+                  <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>📦 Đã Có Hàng</option>
                   <option value="DELIVERING" ${o.status === 'DELIVERING' ? 'selected' : ''}>🚚 Đang Giao</option>
-                  <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>📦 Đã Giao</option>
-                  <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>Hoàn Thành</option>
+                  <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>✅ Hoàn Tất</option>
+                  <option value="CANCELLED" ${o.status === 'CANCELLED' ? 'selected' : ''}>❌ Đã Hủy</option>
                 </select>
               </div>
               ${o.shipping_method ? `
@@ -1457,11 +1751,18 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         // Escape customer_name để tránh lỗi onclick string
         const safeCustomerName = (o.customer_name || '').replace(/'/g, '\\&apos;');
 
+        // Phân tích trạng thái cảnh báo thông minh
+        const isUndelivered = o.type === 'ORDER' && ['PRODUCED', 'DELIVERING'].includes(o.status);
+        const isUnpaid = o.type === 'ORDER' && o.payment_status !== 'PAID' && o.remaining_amount > 0;
+        const isOverdue = o.delivery_deadline && new Date(o.delivery_deadline) < new Date() && !['COMPLETED', 'CANCELLED'].includes(o.status);
+
         return `
-          <tr>
+          <tr style="${isUnpaid ? 'background: rgba(245, 158, 11, 0.04);' : ''}">
             <td class="col-order-code">
               <strong style="color:var(--primary-light);">${o.code}</strong>
               <div style="font-size:11px; color:var(--text-dim);">${new Date(o.created_at).toLocaleDateString('vi-VN')}</div>
+              ${isOverdue ? '<div style="font-size:10px; color:var(--accent-rose); font-weight:700;">🚨 Quá hạn</div>' : ''}
+              ${isUndelivered ? `<div style="font-size:10px; color:var(--primary-light); font-weight:600;">${o.status === 'PRODUCED' ? '📦 Đã có hàng' : '🚚 Đang giao'}</div>` : ''}
             </td>
             <td class="col-order-type">
               <span class="badge ${o.type === 'QUOTE' ? 'badge-quote' : 'badge-confirmed'}">
@@ -1509,15 +1810,16 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               ${o.remaining_amount > 0 ? `<div style="font-size:11px; color:var(--accent-rose); margin-top:2px;">Còn nợ: ${this.formatCurrency(o.remaining_amount)}</div>` : ''}
             </td>
             <td class="col-status">
-              <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:11.5px; padding:3px 6px; width:100%;">
-                <option value="DRAFT" ${o.status === 'DRAFT' ? 'selected' : ''}>Nháp</option>
-                <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>Đã Gửi Báo Giá</option>
-                <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>Đã Chốt Đơn</option>
-                <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>Đang In Xưởng</option>
-                <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>Xưởng Đã Xong</option>
+              <select class="role-select" onchange="App.changeOrderStatus('${o.id}', this.value)" style="font-size:11.5px; padding:3px 6px; width:100%; font-weight:600;">
+                ${o.type === 'QUOTE' ? `
+                  <option value="QUOTE_SENT" ${o.status === 'QUOTE_SENT' ? 'selected' : ''}>📑 Báo Giá</option>
+                ` : ''}
+                <option value="ORDER_CONFIRMED" ${o.status === 'ORDER_CONFIRMED' ? 'selected' : ''}>⏳ Chờ In</option>
+                <option value="IN_PRODUCTION" ${o.status === 'IN_PRODUCTION' ? 'selected' : ''}>🏭 Đang In Xưởng</option>
+                <option value="PRODUCED" ${o.status === 'PRODUCED' ? 'selected' : ''}>📦 Đã Có Hàng</option>
                 <option value="DELIVERING" ${o.status === 'DELIVERING' ? 'selected' : ''}>🚚 Đang Giao</option>
-                <option value="DELIVERED" ${o.status === 'DELIVERED' ? 'selected' : ''}>📦 Đã Giao</option>
-                <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>Hoàn Thành</option>
+                <option value="COMPLETED" ${o.status === 'COMPLETED' ? 'selected' : ''}>✅ Hoàn Tất</option>
+                <option value="CANCELLED" ${o.status === 'CANCELLED' ? 'selected' : ''}>❌ Đã Hủy</option>
               </select>
               ${o.shipping_method ? `
                 <div style="font-size:10.5px; color:var(--text-muted); margin-top:4px;">
@@ -1551,13 +1853,13 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
   renderStatusBadge(status) {
     const badges = {
-      DRAFT: '<span class="badge badge-draft">Bản Nháp</span>',
-      QUOTE_SENT: '<span class="badge badge-quote">Đã Báo Giá</span>',
-      ORDER_CONFIRMED: '<span class="badge badge-confirmed">Đã Chốt Đơn</span>',
+      DRAFT: '<span class="badge badge-draft">Nháp</span>',
+      QUOTE_SENT: '<span class="badge badge-quote">Báo Giá</span>',
+      ORDER_CONFIRMED: '<span class="badge badge-confirmed">Chờ In</span>',
       IN_PRODUCTION: '<span class="badge badge-producing">Đang In Xưởng</span>',
-      PRODUCED: '<span class="badge badge-delivering">Xưởng Xong</span>',
+      PRODUCED: '<span class="badge badge-delivering">Đã Có Hàng</span>',
       DELIVERING: '<span class="badge badge-delivering">Đang Giao</span>',
-      COMPLETED: '<span class="badge badge-completed">Hoàn Thành</span>',
+      COMPLETED: '<span class="badge badge-completed">Hoàn Tất</span>',
       CANCELLED: '<span class="badge badge-unpaid">Đã Hủy</span>'
     };
     return badges[status] || `<span class="badge badge-draft">${status}</span>`;
@@ -2163,7 +2465,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('delivery-info-remaining').textContent = this.formatCurrency(o.remaining_amount || 0);
       document.getElementById('delivery-info-total').textContent = this.formatCurrency(o.total_selling || 0);
 
-      document.getElementById('delivery-form-status').value = ['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(o.status) ? o.status : 'DELIVERING';
+      document.getElementById('delivery-form-status').value = ['PRODUCED', 'DELIVERING', 'COMPLETED'].includes(o.status) ? o.status : 'DELIVERING';
       document.getElementById('delivery-form-fee').value = o.shipping_fee || 0;
       document.getElementById('delivery-form-payer').value = o.shipping_payer || 'CUSTOMER';
       document.getElementById('delivery-form-method').value = o.shipping_method || 'Ahamove';
@@ -2489,30 +2791,30 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
             return `
               <tr>
-                <td>
+                <td class="cell-nowrap">
                   <strong style="color:var(--primary-light);">${j.order_code}</strong>
                   <div style="font-size:11px; color:var(--text-dim);">${orderDate}</div>
-                  <div style="font-size:11px; color:var(--text-muted);">${j.customer_name || ''}</div>
+                  <div style="font-size:11px; color:var(--text-muted); max-width: 130px;" class="cell-ellipsis" title="${j.customer_name || ''}">${j.customer_name || ''}</div>
                 </td>
-                <td>
+                <td style="min-width: 130px; max-width: 170px;" class="cell-wrap">
                   <strong style="color:var(--accent-amber);">${j.supplier_name || 'Chưa gán xưởng'}</strong>
                   ${j.supplier_phone ? `<div style="font-size:11px; color:var(--text-dim);">📞 ${j.supplier_phone}</div>` : ''}
                 </td>
-                <td style="max-width:280px; white-space:normal;">
+                <td style="min-width: 180px; max-width:240px;" class="cell-wrap">
                   <strong>${j.item_name}</strong>
                   <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">${j.specs || ''}</div>
                   ${j.imposition_info ? `<div style="font-size:11px; color:var(--primary-light); margin-top:2px;">📐 ${j.imposition_info}</div>` : ''}
                 </td>
-                <td style="text-align:center; font-weight:700;">
+                <td style="text-align:center; font-weight:700;" class="cell-nowrap">
                   ${this.formatNumber(j.quantity)} <span style="font-size:11px; font-weight:normal; color:var(--text-dim);">${j.unit || ''}</span>
                 </td>
-                <td>${fileHtml}</td>
-                <td style="white-space:nowrap; font-weight:500;">${deadlineText}</td>
-                <td class="col-cost-profit" style="${isSales ? 'display:none;' : ''} text-align:right; font-weight:600; color:var(--accent-amber);">
+                <td class="cell-nowrap">${fileHtml}</td>
+                <td class="cell-nowrap" style="font-weight:500;">${deadlineText}</td>
+                <td class="col-cost-profit cell-nowrap" style="${isSales ? 'display:none;' : ''} text-align:right; font-weight:600; color:var(--accent-amber);">
                   ${this.formatCurrency(j.total_cost)}
                 </td>
-                <td style="text-align:center;">${badgeHtml}</td>
-                <td style="text-align:center;">
+                <td style="text-align:center;" class="cell-nowrap">${badgeHtml}</td>
+                <td style="text-align:center;" class="cell-nowrap">
                   <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
                     ${j.status === 'PENDING' ? `
                       <button class="btn btn-accent btn-sm" onclick="App.sendJobToSupplier('${j.id}')" title="Gửi lệnh này cho xưởng in">🚀 Gửi Xưởng</button>
@@ -2772,25 +3074,25 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
         return `
           <tr>
-            <td><strong>${c.code || 'KH'}</strong></td>
-            <td>
+            <td class="cell-nowrap"><strong>${c.code || 'KH'}</strong></td>
+            <td style="min-width: 170px; max-width: 240px;" class="cell-wrap">
               <div style="font-weight:600; font-size:13.5px;">${c.name}</div>
-              <div style="font-size:11.5px; color:var(--text-dim);">${c.address || ''}</div>
+              <div style="font-size:11.5px; color:var(--text-dim); line-height:1.3;">${c.address || ''}</div>
             </td>
-            <td>${c.phone || ''}</td>
-            <td style="max-width:240px; white-space:normal;">${contactsList || '<span style="color:var(--text-dim);">Chưa có</span>'}</td>
-            <td>
+            <td class="cell-nowrap">${c.phone || ''}</td>
+            <td style="max-width:220px;" class="cell-wrap">${contactsList || '<span style="color:var(--text-dim);">Chưa có</span>'}</td>
+            <td class="cell-nowrap">
               <span class="badge badge-quote">${c.default_discount || 0}%</span>
             </td>
-            <td style="font-size:11.5px;">
+            <td style="font-size:11.5px; max-width: 180px;" class="cell-wrap">
               ${c.tax_code ? `<div><strong>MST:</strong> ${c.tax_code}</div><div>${c.tax_company || ''}</div>` : '<span style="color:var(--text-dim);">Không lấy HĐ</span>'}
             </td>
-            <td>
+            <td class="cell-nowrap">
               <span style="font-weight:700; color:${c.total_debt > 0 ? 'var(--accent-rose)' : 'var(--accent-green)'};">
                 ${this.formatCurrency(c.total_debt)}
               </span>
             </td>
-            <td>
+            <td class="cell-nowrap">
               <button class="btn btn-secondary btn-sm" onclick="App.openNewOrderForCustomer('${c.id}')">+ Lên Đơn</button>
             </td>
           </tr>
@@ -2858,15 +3160,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       if (debtTbody) {
         debtTbody.innerHTML = data.customerDebts.map(d => `
           <tr>
-            <td>
+            <td style="min-width: 140px; max-width: 180px;" class="cell-wrap">
               <strong>${d.name}</strong>
               <div style="font-size:11px; color:var(--text-dim);">${d.code} - ${d.phone || ''}</div>
             </td>
-            <td><span class="badge badge-unpaid">${d.unpaid_orders_count} đơn</span></td>
-            <td>${this.formatCurrency(d.total_ordered)}</td>
-            <td style="color:var(--accent-green);">${this.formatCurrency(d.total_deposited)}</td>
-            <td style="font-weight:700; color:var(--accent-rose); font-size:14px;">${this.formatCurrency(d.current_debt)}</td>
-            <td>
+            <td class="cell-nowrap" style="text-align:center;"><span class="badge badge-unpaid">${d.unpaid_orders_count} đơn</span></td>
+            <td class="cell-nowrap" style="text-align:right;">${this.formatCurrency(d.total_ordered)}</td>
+            <td class="cell-nowrap" style="text-align:right; color:var(--accent-green);">${this.formatCurrency(d.total_deposited)}</td>
+            <td class="cell-nowrap" style="text-align:right; font-weight:700; color:var(--accent-rose); font-size:13.5px;">${this.formatCurrency(d.current_debt)}</td>
+            <td class="cell-nowrap" style="text-align:center;">
               <button class="btn btn-secondary btn-sm" onclick="App.switchTab('orders'); App.state.filters.customer_id='${d.id}'; App.loadOrders();">Xem Các Đơn Nợ</button>
             </td>
           </tr>

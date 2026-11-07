@@ -59,10 +59,15 @@ router.get('/stats', (req, res) => {
       SELECT 
         COUNT(CASE WHEN type = 'ORDER' THEN 1 END) as total_orders,
         COUNT(CASE WHEN type = 'QUOTE' THEN 1 END) as total_quotes,
-        COUNT(CASE WHEN status = 'IN_PRODUCTION' THEN 1 END) as in_production_count,
         COUNT(CASE WHEN status = 'ORDER_CONFIRMED' THEN 1 END) as confirmed_count,
+        COUNT(CASE WHEN status = 'IN_PRODUCTION' THEN 1 END) as in_production_count,
+        COUNT(CASE WHEN status = 'PRODUCED' THEN 1 END) as ready_count,
         COUNT(CASE WHEN status = 'DELIVERING' THEN 1 END) as delivering_count,
         COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_count,
+        -- Cảnh báo đặc biệt
+        COUNT(CASE WHEN type = 'ORDER' AND status NOT IN ('COMPLETED', 'CANCELLED') THEN 1 END) as uncompleted_orders_count,
+        COUNT(CASE WHEN type = 'ORDER' AND status IN ('PRODUCED', 'DELIVERING') THEN 1 END) as undelivered_orders_count,
+        COUNT(CASE WHEN type = 'ORDER' AND payment_status != 'PAID' AND remaining_amount > 0 THEN 1 END) as unpaid_orders_count,
         COALESCE(SUM(CASE WHEN type = 'ORDER' THEN total_selling ELSE 0 END), 0) as total_revenue,
         COALESCE(SUM(CASE WHEN type = 'ORDER' THEN total_cost ELSE 0 END), 0) as total_cost,
         COALESCE(SUM(CASE WHEN type = 'ORDER' THEN gross_profit ELSE 0 END), 0) as total_profit,
@@ -355,7 +360,7 @@ router.post('/suppliers', (req, res) => {
 // ==========================================
 router.get('/orders', (req, res) => {
   try {
-    const { status, type, customer_id, q } = req.query;
+    const { status, type, customer_id, q, alert_filter } = req.query;
     let query = `
       SELECT o.*, c.name as customer_name, c.code as customer_code, c.phone as customer_phone,
         ct.name as contact_name, ct.phone as contact_phone
@@ -368,6 +373,17 @@ router.get('/orders', (req, res) => {
     if (isSalesUser(req)) {
       query += ` AND o.created_by_user_id = ?`;
       params.push(req.user.id);
+    }
+
+    if (alert_filter === 'UNDELIVERED') {
+      // Đơn chưa giao: đã xong ở xưởng hoặc đang đi giao, chưa đến tay khách hoàn thành
+      query += ` AND o.type = 'ORDER' AND o.status IN ('PRODUCED', 'DELIVERING')`;
+    } else if (alert_filter === 'UNPAID') {
+      // Đơn còn nợ: chưa thanh toán đủ và còn số tiền nợ > 0
+      query += ` AND o.type = 'ORDER' AND o.payment_status != 'PAID' AND o.remaining_amount > 0`;
+    } else if (alert_filter === 'UNCOMPLETED') {
+      // Đơn chưa hoàn tất: các đơn đang xử lý chưa sang COMPLETED hoặc CANCELLED
+      query += ` AND o.type = 'ORDER' AND o.status NOT IN ('COMPLETED', 'CANCELLED')`;
     }
 
     if (type) {
@@ -524,7 +540,10 @@ router.post('/orders', (req, res) => {
       payment_status = 'PARTIAL';
     }
 
-    const initialStatus = type === 'QUOTE' ? 'QUOTE_SENT' : (parsedDeposit > 0 ? 'ORDER_CONFIRMED' : 'DRAFT');
+    // Trạng thái ban đầu:
+    // Nếu là BÁO GIÁ -> QUOTE_SENT (Chờ khách duyệt)
+    // Nếu là ĐƠN HÀNG -> ORDER_CONFIRMED (Đã chốt in, bất kể có cọc ngay hay nợ công nợ B2B)
+    const initialStatus = type === 'QUOTE' ? 'QUOTE_SENT' : 'ORDER_CONFIRMED';
 
     const insertOrder = db.prepare(`
       INSERT INTO orders (
@@ -725,8 +744,8 @@ router.patch('/orders/:id/status', (req, res) => {
     const { status } = req.body;
     db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
 
-    // Nếu đơn hàng chuyển sang Xưởng xong, Đang giao, Đã giao hoặc Hoàn thành, tự động cập nhật các lệnh xưởng chưa xong thành 'DONE'
-    if (['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(status)) {
+    // Nếu đơn hàng chuyển sang Đã có hàng / Đang giao hoặc Hoàn thành, tự động cập nhật các lệnh xưởng chưa xong thành 'DONE'
+    if (['PRODUCED', 'DELIVERING', 'COMPLETED'].includes(status)) {
       db.prepare("UPDATE order_items SET status = 'DONE' WHERE order_id = ? AND status != 'DONE'").run(req.params.id);
     }
     // Nếu đơn hàng bị HỦY, có thể hủy các lệnh PENDING
@@ -820,7 +839,7 @@ router.patch('/orders/:id/delivery', (req, res) => {
     );
 
     // Đồng bộ trạng thái các hạng mục sản xuất nếu đơn đã làm xong hoặc giao hàng
-    if (['PRODUCED', 'DELIVERING', 'DELIVERED', 'COMPLETED'].includes(newStatus)) {
+    if (['PRODUCED', 'DELIVERING', 'COMPLETED'].includes(newStatus)) {
       db.prepare("UPDATE order_items SET status = 'DONE' WHERE order_id = ? AND status != 'DONE'").run(req.params.id);
     }
 

@@ -396,12 +396,12 @@ router.get('/orders/export', async (req, res) => {
 
     const statusLabels = {
       DRAFT: 'Bản Nháp',
-      QUOTE_SENT: 'Đã Báo Giá',
-      ORDER_CONFIRMED: 'Đã Chốt Đơn',
+      QUOTE_SENT: 'Báo Giá',
+      ORDER_CONFIRMED: 'Đã Chốt In',
       IN_PRODUCTION: 'Đang In Xưởng',
-      PRODUCED: 'Xưởng Đã Xong',
+      PRODUCED: 'Đã Có Hàng',
       DELIVERING: 'Đang Giao',
-      COMPLETED: 'Hoàn Thành',
+      COMPLETED: 'Hoàn Tất',
       CANCELLED: 'Đã Hủy'
     };
 

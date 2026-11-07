@@ -135,14 +135,14 @@ window.Management = {
       } else {
         custTbody.innerHTML = topCustomers.map((c, idx) => `
           <tr>
-            <td>
-              <strong style="color:var(--text-main);">${this.esc(c.name)}</strong>
-              <div style="font-size:11px; color:var(--text-dim);">${this.esc(c.code || '')} • ${this.esc(c.phone || '')}</div>
+            <td style="max-width: 220px;">
+              <strong style="color:var(--text-main); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${this.esc(c.name)}">${this.esc(c.name)}</strong>
+              <div style="font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${this.esc(c.code || '')}${c.phone ? ' • ' + this.esc(c.phone) : ''}</div>
             </td>
             <td style="text-align:center; font-weight:600;">${c.order_count}</td>
-            <td style="text-align:right; font-weight:700; color:var(--primary-light);">${this.money(c.total_revenue)}</td>
-            <td style="text-align:right; font-weight:600; color:var(--accent-green);">${this.money(c.total_profit)}</td>
-            <td style="text-align:right; color:var(--accent-rose);">${this.money(c.current_debt)}</td>
+            <td style="text-align:right; font-weight:700; color:var(--primary-light); white-space:nowrap;">${this.money(c.total_revenue)}</td>
+            <td style="text-align:right; font-weight:600; color:var(--accent-green); white-space:nowrap;">${this.money(c.total_profit)}</td>
+            <td style="text-align:right; color:var(--accent-rose); white-space:nowrap;">${this.money(c.current_debt)}</td>
           </tr>
         `).join('');
       }
@@ -156,13 +156,13 @@ window.Management = {
       } else {
         supTbody.innerHTML = suppliersReport.map(s => `
           <tr>
-            <td>
-              <strong style="color:var(--accent-amber);">${this.esc(s.supplier_name)}</strong>
-              ${s.specialties ? `<div style="font-size:11px; color:var(--text-dim);">${this.esc(s.specialties)}</div>` : ''}
+            <td style="max-width: 220px;">
+              <strong style="color:var(--accent-amber); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${this.esc(s.supplier_name)}">${this.esc(s.supplier_name)}</strong>
+              ${s.specialties ? `<div style="font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${this.esc(s.specialties)}">${this.esc(s.specialties)}</div>` : ''}
             </td>
             <td style="text-align:center; font-weight:600;">${s.item_count}</td>
-            <td style="text-align:right; font-weight:700; color:var(--accent-amber);">${this.money(s.total_cost)}</td>
-            <td style="text-align:right; color:var(--text-muted);">${this.money(s.total_selling_value)}</td>
+            <td style="text-align:right; font-weight:700; color:var(--accent-amber); white-space:nowrap;">${this.money(s.total_cost)}</td>
+            <td style="text-align:right; color:var(--text-muted); white-space:nowrap;">${this.money(s.total_selling_value)}</td>
           </tr>
         `).join('');
       }

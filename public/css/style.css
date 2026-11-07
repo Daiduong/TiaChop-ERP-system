@@ -571,25 +571,43 @@ body {
   border-collapse: collapse;
   text-align: left;
   font-size: 13px;
-  white-space: nowrap;
+  table-layout: auto;
 }
 
 .data-table th {
   background-color: var(--bg-elevated);
-  padding: 12px 14px;
+  padding: 10px 12px;
   color: var(--text-muted);
   font-weight: 600;
   border-bottom: 1px solid var(--border-subtle);
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-main);
   vertical-align: middle;
+}
+
+/* Các lớp hỗ trợ chống tràn trang (No horizontal scroll) */
+.cell-wrap {
+  white-space: normal !important;
+  word-break: break-word;
+}
+
+.cell-nowrap {
+  white-space: nowrap !important;
+}
+
+.cell-ellipsis {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: block;
 }
 
 .data-table tbody tr {
