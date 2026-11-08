@@ -780,5 +780,205 @@ router.post('/papers/import', express.raw({ type: '*/*', limit: '10mb' }), async
   }
 });
 
+// ========================================================
+// 6. EXPORT & IMPORT: SẢN PHẨM MẪU (PRODUCT PRESETS)
+// ========================================================
+
+// Export Sản phẩm mẫu
+router.get('/presets/export', async (req, res) => {
+  try {
+    const presets = db.prepare('SELECT * FROM product_presets ORDER BY group_type ASC, sort_order ASC, name ASC').all();
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sản Phẩm Mẫu');
+
+    ws.columns = [
+      { header: 'STT', key: 'stt', width: 6 },
+      { header: 'Mã Mẫu (*)', key: 'code', width: 20 },
+      { header: 'Nhóm In (*)', key: 'group_type', width: 18 },
+      { header: 'Tên Sản Phẩm Mẫu (*)', key: 'name', width: 34 },
+      { header: 'Mô Tả Quy Cách', key: 'description', width: 36 },
+      { header: 'Rộng (mm)', key: 'width', width: 12 },
+      { header: 'Cao (mm)', key: 'height', width: 12 },
+      { header: 'Số Lượng Mặc Định', key: 'quantity', width: 18 },
+      { header: 'Đơn Vị Tính', key: 'unit', width: 12 },
+      { header: 'Con / Đơn Vị', key: 'pcs_per_unit', width: 14 },
+      { header: 'Xưởng Mặc Định (ID)', key: 'supplier_id', width: 18 },
+      { header: 'Cấu Hình Kỹ Thuật (JSON)', key: 'config_json', width: 45 },
+      { header: 'Thứ Tự', key: 'sort_order', width: 10 },
+      { header: 'Trạng Thái', key: 'status', width: 14 }
+    ];
+
+    styleHeaderRow(ws.getRow(1), '4F46E5'); // Màu tím Indigo chuyên nghiệp
+
+    presets.forEach((p, idx) => {
+      const row = ws.addRow({
+        stt: idx + 1,
+        code: p.code || '',
+        group_type: p.group_type || 'DIGITAL',
+        name: p.name || '',
+        description: p.description || '',
+        width: p.width || 0,
+        height: p.height || 0,
+        quantity: p.quantity || 1,
+        unit: p.unit || 'cái',
+        pcs_per_unit: p.pcs_per_unit || 1,
+        supplier_id: p.supplier_id || '',
+        config_json: p.config_json || '{}',
+        sort_order: p.sort_order || 0,
+        status: p.is_active ? 'Hoạt động' : 'Tạm ẩn'
+      });
+
+      styleDataRow(row);
+      row.getCell('stt').alignment = { horizontal: 'center' };
+      row.getCell('code').alignment = { horizontal: 'center' };
+      row.getCell('group_type').alignment = { horizontal: 'center' };
+      row.getCell('width').alignment = { horizontal: 'center' };
+      row.getCell('height').alignment = { horizontal: 'center' };
+      row.getCell('quantity').numFmt = '#,##0';
+      row.getCell('unit').alignment = { horizontal: 'center' };
+      row.getCell('pcs_per_unit').alignment = { horizontal: 'center' };
+      row.getCell('sort_order').alignment = { horizontal: 'center' };
+      row.getCell('status').alignment = { horizontal: 'center' };
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=DS_SanPhamMau_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    const buffer = await wb.xlsx.writeBuffer();
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xuất Excel sản phẩm mẫu: ' + err.message });
+  }
+});
+
+// Import Sản phẩm mẫu
+router.post('/presets/import', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
+  try {
+    if (!req.body || req.body.length === 0) {
+      return res.status(400).json({ error: 'File Excel không có nội dung' });
+    }
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(req.body);
+    const ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ error: 'File không có trang tính (Sheet)' });
+
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    const findRow = db.prepare('SELECT id, code FROM product_presets WHERE code = ?');
+    const insertStmt = db.prepare(`
+      INSERT INTO product_presets (
+        id, group_type, code, name, description, unit,
+        width, height, quantity, pcs_per_unit,
+        supplier_id, config_json, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updateStmt = db.prepare(`
+      UPDATE product_presets SET
+        group_type = ?,
+        name = ?,
+        description = ?,
+        unit = ?,
+        width = ?,
+        height = ?,
+        quantity = ?,
+        pcs_per_unit = ?,
+        supplier_id = ?,
+        config_json = ?,
+        is_active = ?,
+        sort_order = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      const getVal = (idx) => {
+        const val = row.getCell(idx).value;
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'object' && val.text) return String(val.text).trim();
+        if (typeof val === 'object' && val.result !== undefined) return String(val.result).trim();
+        return String(val).trim();
+      };
+
+      const getNum = (idx, def = 0) => {
+        const val = row.getCell(idx).value;
+        if (val === null || val === undefined || val === '') return def;
+        if (typeof val === 'object' && val.result !== undefined) return Number(val.result) || def;
+        const n = Number(String(val).replace(/[^0-9.-]/g, ''));
+        return isNaN(n) ? def : n;
+      };
+
+      // Header: 1:STT, 2:Mã Mẫu, 3:Nhóm In, 4:Tên Sản Phẩm, 5:Mô Tả, 6:Rộng, 7:Cao, 8:Số Lượng, 9:ĐVT, 10:Con/Đơn vị, 11:Xưởng ID, 12:Config JSON, 13:Thứ Tự, 14:Trạng Thái
+      let code = getVal(2).toUpperCase();
+      let groupType = getVal(3).toUpperCase();
+      const name = getVal(4);
+
+      if (!name) {
+        skipped++;
+        return;
+      }
+
+      // Chuẩn hóa nhóm in
+      const validGroups = ['DIGITAL', 'OFFSET', 'LARGE_FORMAT', 'DOCUMENT_SPIRAL'];
+      if (!validGroups.includes(groupType)) {
+        if (groupType.includes('DIGIT') || groupType.includes('KTS') || groupType.includes('NHANH')) groupType = 'DIGITAL';
+        else if (groupType.includes('OFF')) groupType = 'OFFSET';
+        else if (groupType.includes('LARGE') || groupType.includes('BAT') || groupType.includes('QUANG')) groupType = 'LARGE_FORMAT';
+        else if (groupType.includes('DOC') || groupType.includes('SACH') || groupType.includes('XO')) groupType = 'DOCUMENT_SPIRAL';
+        else groupType = 'DIGITAL';
+      }
+
+      if (!code) {
+        code = `SPM_${Date.now().toString().slice(-6)}_${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+      }
+
+      const description = getVal(5);
+      const width = getNum(6, 0);
+      const height = getNum(7, 0);
+      const quantity = getNum(8, 1);
+      const unit = getVal(9) || 'cái';
+      const pcsPerUnit = getNum(10, 1);
+      const supplierId = getVal(11);
+      let configJson = getVal(12) || '{}';
+      try { JSON.parse(configJson); } catch (e) { configJson = '{}'; }
+
+      const sortOrder = getNum(13, 0);
+      const statusText = getVal(14).toLowerCase();
+      const isActive = (statusText.includes('ẩn') || statusText.includes('tắt') || statusText === '0') ? 0 : 1;
+
+      const existing = findRow.get(code);
+      if (existing) {
+        updateStmt.run(
+          groupType, name, description, unit,
+          width, height, quantity, pcsPerUnit,
+          supplierId || null, configJson, isActive, sortOrder,
+          existing.id
+        );
+        updated++;
+      } else {
+        const newId = `preset_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        insertStmt.run(
+          newId, groupType, code, name, description, unit,
+          width, height, quantity, pcsPerUnit,
+          supplierId || null, configJson, isActive, sortOrder
+        );
+        imported++;
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Đã nhập xong danh sách sản phẩm mẫu: thêm mới ${imported}, cập nhật ${updated}, bỏ qua ${skipped} dòng trống.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi khi import file Excel sản phẩm mẫu: ' + err.message });
+  }
+});
+
 module.exports = router;
 
