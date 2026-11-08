@@ -153,11 +153,12 @@ function initDatabase() {
       id TEXT PRIMARY KEY,
       category TEXT NOT NULL, -- PAPER, FINISHING, BASE_SIZE, PRODUCT_TEMPLATE
       name TEXT NOT NULL,
-      code TEXT,
+      code TEXT UNIQUE,
       base_cost REAL DEFAULT 0,
       unit TEXT,
       metadata TEXT
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_print_configs_code ON print_configs(code);
 
     -- Bảng Sản phẩm mẫu / Presets tính giá
     CREATE TABLE IF NOT EXISTS product_presets (

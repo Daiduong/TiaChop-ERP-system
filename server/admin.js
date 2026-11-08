@@ -213,22 +213,16 @@ router.post('/papers', (req, res) => {
     // Đồng bộ vào print_configs để bộ tính giá KTS hoặc cấu hình dùng được ngay
     try {
       const cfgId = `cfg_paper_${cleanCode.toLowerCase()}`;
-      db.prepare(`
-        INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
-        VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
-        ON CONFLICT(code) DO UPDATE SET
-          name = excluded.name,
-          base_cost = excluded.base_cost,
-          unit = excluded.unit,
-          metadata = excluded.metadata
-      `).run(
-        cfgId,
-        name.trim(),
-        cleanCode,
-        costSheet,
-        unit ? `${unit} ${size_spec || '32x43'}` : 'tờ 32x43',
-        JSON.stringify({ gsm: gsmNum, paper_type })
-      );
+      const existingCfg = db.prepare('SELECT id FROM print_configs WHERE code = ? OR id = ?').get(cleanCode, cfgId);
+      const unitText = unit ? `${unit} ${size_spec || '32x43'}` : 'tờ 32x43';
+      const meta = JSON.stringify({ gsm: gsmNum, paper_type });
+      if (existingCfg) {
+        db.prepare('UPDATE print_configs SET name = ?, base_cost = ?, unit = ?, metadata = ? WHERE id = ?')
+          .run(name.trim(), costSheet, unitText, meta, existingCfg.id);
+      } else {
+        db.prepare("INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata) VALUES (?, 'PAPER', ?, ?, ?, ?, ?)")
+          .run(cfgId, name.trim(), cleanCode, costSheet, unitText, meta);
+      }
     } catch (syncErr) {
       console.warn('Lưu print_configs sync warning:', syncErr.message);
     }
@@ -287,22 +281,17 @@ router.put('/papers/:id', (req, res) => {
 
     // Đồng bộ sang print_configs nếu mã tương ứng có trong print_configs hoặc ghi đè
     try {
-      db.prepare(`
-        INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
-        VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
-        ON CONFLICT(code) DO UPDATE SET
-          name = excluded.name,
-          base_cost = excluded.base_cost,
-          unit = excluded.unit,
-          metadata = excluded.metadata
-      `).run(
-        `cfg_paper_${cleanCode.toLowerCase()}`,
-        name ?? existing.name,
-        cleanCode,
-        costSheet,
-        `${unit || existing.unit || 'tờ'} ${size_spec || existing.size_spec || '32x43'}`,
-        JSON.stringify({ gsm: gsmNum, paper_type: paper_type ?? existing.paper_type })
-      );
+      const cfgId = `cfg_paper_${cleanCode.toLowerCase()}`;
+      const existingCfg = db.prepare('SELECT id FROM print_configs WHERE code = ? OR id = ?').get(cleanCode, cfgId);
+      const unitText = `${unit || existing.unit || 'tờ'} ${size_spec || existing.size_spec || '32x43'}`;
+      const meta = JSON.stringify({ gsm: gsmNum, paper_type: paper_type ?? existing.paper_type });
+      if (existingCfg) {
+        db.prepare('UPDATE print_configs SET name = ?, base_cost = ?, unit = ?, metadata = ? WHERE id = ?')
+          .run(name ?? existing.name, costSheet, unitText, meta, existingCfg.id);
+      } else {
+        db.prepare("INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata) VALUES (?, 'PAPER', ?, ?, ?, ?, ?)")
+          .run(cfgId, name ?? existing.name, cleanCode, costSheet, unitText, meta);
+      }
     } catch (syncErr) {
       console.warn('Lưu print_configs sync warning:', syncErr.message);
     }

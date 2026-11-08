@@ -682,15 +682,6 @@ router.post('/papers/import', express.raw({ type: '*/*', limit: '10mb' }), async
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
-    const syncConfigStmt = db.prepare(`
-      INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
-      VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
-      ON CONFLICT(code) DO UPDATE SET
-        name = excluded.name,
-        base_cost = excluded.base_cost,
-        unit = excluded.unit,
-        metadata = excluded.metadata
-    `);
 
     // Duyệt qua từng dòng dữ liệu (bỏ qua header dòng 1)
     ws.eachRow((row, rowNumber) => {
@@ -756,17 +747,28 @@ router.post('/papers/import', express.raw({ type: '*/*', limit: '10mb' }), async
         imported++;
       }
 
-      // Sync print_configs
+      // Sync print_configs an toàn (kiểm tra tồn tại trước thay vì dựa hoàn toàn vào ON CONFLICT)
       try {
-        syncConfigStmt.run(
-          `cfg_paper_${code.toLowerCase()}`,
-          name,
-          code,
-          costSheet,
-          `${unit} ${sizeSpec}`,
-          JSON.stringify({ gsm, paper_type: paperType })
-        );
-      } catch (errSync) {}
+        const cfgId = `cfg_paper_${code.toLowerCase()}`;
+        const existingCfg = db.prepare('SELECT id FROM print_configs WHERE code = ? OR id = ?').get(code, cfgId);
+        if (existingCfg) {
+          db.prepare(`
+            UPDATE print_configs SET
+              name = ?,
+              base_cost = ?,
+              unit = ?,
+              metadata = ?
+            WHERE id = ?
+          `).run(name, costSheet, `${unit} ${sizeSpec}`, JSON.stringify({ gsm, paper_type: paperType }), existingCfg.id);
+        } else {
+          db.prepare(`
+            INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
+            VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
+          `).run(cfgId, name, code, costSheet, `${unit} ${sizeSpec}`, JSON.stringify({ gsm, paper_type: paperType }));
+        }
+      } catch (errSync) {
+        console.warn('Lỗi sync print_configs khi import giấy:', errSync.message);
+      }
     });
 
     res.json({
