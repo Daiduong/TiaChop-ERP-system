@@ -145,6 +145,187 @@ router.get('/price-configs', (req, res) => {
   res.json(db.prepare('SELECT * FROM print_configs ORDER BY category, name').all());
 });
 
+// ==========================================
+// QUẢN LÝ DANH MỤC LOẠI GIẤY (PAPERS CATALOG)
+// ==========================================
+// Đảm bảo bảng papers tồn tại
+db.exec(`
+  CREATE TABLE IF NOT EXISTS papers (
+    id TEXT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    paper_type TEXT NOT NULL DEFAULT 'COUCHE',
+    gsm INTEGER NOT NULL DEFAULT 150,
+    size_spec TEXT DEFAULT '32x43',
+    unit TEXT DEFAULT 'tờ',
+    cost_per_sheet REAL DEFAULT 0,
+    cost_per_kg REAL DEFAULT 0,
+    notes TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+router.get('/papers', (req, res) => {
+  try {
+    const list = db.prepare('SELECT * FROM papers ORDER BY paper_type, gsm ASC, name ASC').all();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/papers', (req, res) => {
+  try {
+    const { code, name, paper_type, gsm, size_spec, unit, cost_per_sheet, cost_per_kg, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'Tên loại giấy không được để trống' });
+    
+    // Tạo code tự động nếu không nhập
+    const cleanCode = (code || name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15)).trim();
+    if (!cleanCode) return res.status(400).json({ error: 'Mã giấy không hợp lệ' });
+
+    // Kiểm tra trùng mã
+    const existing = db.prepare('SELECT id FROM papers WHERE code = ?').get(cleanCode);
+    if (existing) return res.status(400).json({ error: `Mã giấy '${cleanCode}' đã tồn tại!` });
+
+    const id = `paper_${Date.now()}`;
+    const costSheet = Number(cost_per_sheet) || 0;
+    const costKg = Number(cost_per_kg) || 0;
+    const gsmNum = Number(gsm) || 150;
+
+    db.prepare(`
+      INSERT INTO papers (id, code, name, paper_type, gsm, size_spec, unit, cost_per_sheet, cost_per_kg, notes, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      id,
+      cleanCode,
+      name.trim(),
+      paper_type || 'COUCHE',
+      gsmNum,
+      size_spec || '32x43',
+      unit || 'tờ',
+      costSheet,
+      costKg,
+      notes || ''
+    );
+
+    // Đồng bộ vào print_configs để bộ tính giá KTS hoặc cấu hình dùng được ngay
+    try {
+      const cfgId = `cfg_paper_${cleanCode.toLowerCase()}`;
+      db.prepare(`
+        INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
+        VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET
+          name = excluded.name,
+          base_cost = excluded.base_cost,
+          unit = excluded.unit,
+          metadata = excluded.metadata
+      `).run(
+        cfgId,
+        name.trim(),
+        cleanCode,
+        costSheet,
+        unit ? `${unit} ${size_spec || '32x43'}` : 'tờ 32x43',
+        JSON.stringify({ gsm: gsmNum, paper_type })
+      );
+    } catch (syncErr) {
+      console.warn('Lưu print_configs sync warning:', syncErr.message);
+    }
+
+    res.json({ success: true, id, code: cleanCode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/papers/:id', (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM papers WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy loại giấy' });
+
+    const { code, name, paper_type, gsm, size_spec, unit, cost_per_sheet, cost_per_kg, notes, is_active } = req.body;
+    const cleanCode = (code || existing.code).trim();
+
+    // Check unique code if changed
+    if (cleanCode !== existing.code) {
+      const dup = db.prepare('SELECT id FROM papers WHERE code = ? AND id != ?').get(cleanCode, req.params.id);
+      if (dup) return res.status(400).json({ error: `Mã giấy '${cleanCode}' đã được sử dụng!` });
+    }
+
+    const costSheet = cost_per_sheet !== undefined ? Number(cost_per_sheet) : existing.cost_per_sheet;
+    const costKg = cost_per_kg !== undefined ? Number(cost_per_kg) : existing.cost_per_kg;
+    const gsmNum = gsm !== undefined ? Number(gsm) : existing.gsm;
+
+    db.prepare(`
+      UPDATE papers SET
+        code = ?,
+        name = ?,
+        paper_type = ?,
+        gsm = ?,
+        size_spec = ?,
+        unit = ?,
+        cost_per_sheet = ?,
+        cost_per_kg = ?,
+        notes = ?,
+        is_active = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      cleanCode,
+      name ?? existing.name,
+      paper_type ?? existing.paper_type,
+      gsmNum,
+      size_spec ?? existing.size_spec,
+      unit ?? existing.unit,
+      costSheet,
+      costKg,
+      notes ?? existing.notes,
+      is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active,
+      req.params.id
+    );
+
+    // Đồng bộ sang print_configs nếu mã tương ứng có trong print_configs hoặc ghi đè
+    try {
+      db.prepare(`
+        INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
+        VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET
+          name = excluded.name,
+          base_cost = excluded.base_cost,
+          unit = excluded.unit,
+          metadata = excluded.metadata
+      `).run(
+        `cfg_paper_${cleanCode.toLowerCase()}`,
+        name ?? existing.name,
+        cleanCode,
+        costSheet,
+        `${unit || existing.unit || 'tờ'} ${size_spec || existing.size_spec || '32x43'}`,
+        JSON.stringify({ gsm: gsmNum, paper_type: paper_type ?? existing.paper_type })
+      );
+    } catch (syncErr) {
+      console.warn('Lưu print_configs sync warning:', syncErr.message);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/papers/:id', (req, res) => {
+  try {
+    const existing = db.prepare('SELECT * FROM papers WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy loại giấy' });
+
+    // Xoá mềm hoặc xoá khỏi DB
+    db.prepare('DELETE FROM papers WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.put('/price-configs/:id', (req, res) => {
   const { name, base_cost, unit } = req.body;
   const before = db.prepare('SELECT * FROM print_configs WHERE id = ?').get(req.params.id);

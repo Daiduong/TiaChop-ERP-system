@@ -240,6 +240,10 @@ const App = {
 
     // Refresh dữ liệu theo tab
     if (tabId === 'dashboard') this.loadDashboard();
+    if (tabId === 'pricing') {
+      this.refreshPaperDropdowns();
+      this.triggerPricingCalculation();
+    }
     if (tabId === 'orders') {
       // Reset filter về ALL khi chuyển sang tab orders để đảm bảo thấy đủ đơn hàng
       this.state.filters.status = 'ALL';
@@ -3786,8 +3790,32 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   },
 
   // ==========================================
-  // HELPERS
+  // HELPERS & DYNAMIC CATALOG
   // ==========================================
+  async refreshPaperDropdowns() {
+    try {
+      const res = await fetch('/api/admin/papers');
+      if (!res.ok) return;
+      const papers = await res.json();
+      if (!Array.isArray(papers) || papers.length === 0) return;
+
+      const digSelect = document.getElementById('calc-dig-paper');
+      if (digSelect) {
+        const curVal = digSelect.value;
+        const activePapers = papers.filter(p => p.is_active !== 0);
+        digSelect.innerHTML = activePapers.map(p => {
+          const priceNote = p.cost_per_sheet ? ` (${p.cost_per_sheet.toLocaleString('vi-VN')} đ/tờ)` : '';
+          return `<option value="${p.code}">${p.name}${priceNote}</option>`;
+        }).join('');
+        if (curVal && activePapers.some(p => p.code === curVal)) {
+          digSelect.value = curVal;
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi refreshPaperDropdowns:', e.message);
+    }
+  },
+
   closeModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
   },

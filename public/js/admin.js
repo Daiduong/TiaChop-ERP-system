@@ -6,6 +6,9 @@ window.Admin = {
   users: [],
   settings: {},
   prices: [],
+  papers: [],
+  currentPaperTypeFilter: 'ALL',
+  paperSearchQuery: '',
 
   ROLE_INFO: {
     ADMIN: { label: '👑 Admin', cls: 'badge-producing', desc: 'Toàn quyền: Đơn hàng, Giá vốn, Lợi nhuận, Sổ quỹ, Quản trị hệ thống.' },
@@ -36,6 +39,7 @@ window.Admin = {
 
   load() {
     this.loadUsers();
+    this.loadPapers();
     this.loadPresets();
     this.loadSettings();
     this.loadPrices();
@@ -49,6 +53,7 @@ window.Admin = {
     document.querySelectorAll('.admin-sub').forEach(el => { el.style.display = el.id === `admin-sub-${sub}` ? '' : 'none'; });
     if (sub === 'backup') this.loadDbInfo();
     if (sub === 'presets') this.loadPresets();
+    if (sub === 'papers') this.loadPapers();
   },
 
   async api(url, method = 'GET', body) {
@@ -821,6 +826,177 @@ window.Admin = {
       await this.loadPresets();
       if (window.App && window.App.loadPresetsFromApi) {
         await window.App.loadPresetsFromApi();
+      }
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  },
+
+  // ================= QUẢN LÝ LOẠI GIẤY (PAPERS) =================
+  async loadPapers() {
+    try {
+      this.papers = await this.api('/papers');
+      this.renderPapers();
+    } catch (err) {
+      console.error('Lỗi khi tải danh sách loại giấy:', err);
+    }
+  },
+
+  filterPaperType(type) {
+    this.currentPaperTypeFilter = type;
+    document.querySelectorAll('#paper-group-filters .filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.paperType === type);
+    });
+    this.renderPapers();
+  },
+
+  searchPapers(q) {
+    this.paperSearchQuery = (q || '').trim().toLowerCase();
+    this.renderPapers();
+  },
+
+  renderPapers() {
+    const tbody = document.getElementById('admin-papers-tbody');
+    if (!tbody) return;
+
+    let filtered = (this.papers || []).slice();
+
+    // Lọc theo nhóm giấy
+    if (this.currentPaperTypeFilter && this.currentPaperTypeFilter !== 'ALL') {
+      filtered = filtered.filter(p => p.paper_type === this.currentPaperTypeFilter);
+    }
+
+    // Lọc theo từ khoá tìm kiếm
+    if (this.paperSearchQuery) {
+      const q = this.paperSearchQuery;
+      filtered = filtered.filter(p =>
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.code && p.code.toLowerCase().includes(q)) ||
+        (p.paper_type && p.paper_type.toLowerCase().includes(q)) ||
+        (p.notes && p.notes.toLowerCase().includes(q)) ||
+        String(p.gsm).includes(q)
+      );
+    }
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:24px; color:var(--text-muted);">Không tìm thấy loại giấy nào phù hợp.</td></tr>`;
+      return;
+    }
+
+    const typeLabels = {
+      COUCHE: '<span class="badge" style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3);">Couche</span>',
+      FORT: '<span class="badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);">Fort/Ford</span>',
+      IVORY: '<span class="badge" style="background:rgba(245,158,11,0.15); color:#fbbf24; border:1px solid rgba(245,158,11,0.3);">Ivory</span>',
+      BRISTOL: '<span class="badge" style="background:rgba(168,85,247,0.15); color:#c084fc; border:1px solid rgba(168,85,247,0.3);">Bristol</span>',
+      DECAL: '<span class="badge" style="background:rgba(236,72,153,0.15); color:#f472b6; border:1px solid rgba(236,72,153,0.3);">Decal</span>',
+      KRAFT: '<span class="badge" style="background:rgba(217,119,6,0.15); color:#f59e0b; border:1px solid rgba(217,119,6,0.3);">Kraft</span>',
+      ART: '<span class="badge" style="background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3);">Mỹ Thuật</span>',
+      OTHER: '<span class="badge badge-draft">Khác</span>'
+    };
+
+    tbody.innerHTML = filtered.map(p => {
+      const typeBadge = typeLabels[p.paper_type] || `<span class="badge badge-draft">${this.esc(p.paper_type)}</span>`;
+      const costSheet = Number(p.cost_per_sheet) || 0;
+      const costKg = Number(p.cost_per_kg) || 0;
+      // Gợi ý giá bán margin 40% (cost / 0.6)
+      const suggestedSheet = costSheet > 0 ? Math.round(costSheet / 0.6 / 50) * 50 : 0;
+      const statusBadge = p.is_active
+        ? '<span class="badge badge-paid">Sử dụng</span>'
+        : '<span class="badge badge-unpaid">Ẩn</span>';
+
+      return `
+        <tr>
+          <td><strong style="color:var(--primary-light); font-family:monospace; font-size:13px;">${this.esc(p.code)}</strong></td>
+          <td>${typeBadge}</td>
+          <td>
+            <div style="font-weight:600; color:var(--text-main);">${this.esc(p.name)}</div>
+            ${p.notes ? `<div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${this.esc(p.notes)}</div>` : ''}
+          </td>
+          <td style="text-align:center;"><strong>${p.gsm || '-'}</strong> <span style="font-size:11px; color:var(--text-dim);">gsm</span></td>
+          <td style="font-size:12px; color:var(--text-dim);">${this.esc(p.size_spec || '32x43')}</td>
+          <td style="text-align:right; font-weight:700; color:var(--accent-amber);">${costSheet.toLocaleString('vi-VN')} đ</td>
+          <td style="text-align:right; font-size:12px; color:var(--text-dim);">${costKg > 0 ? costKg.toLocaleString('vi-VN') + ' đ' : '-'}</td>
+          <td style="text-align:right; font-weight:700; color:var(--accent-green);">${suggestedSheet > 0 ? suggestedSheet.toLocaleString('vi-VN') + ' đ' : '-'}</td>
+          <td style="text-align:center;">${statusBadge}</td>
+          <td style="text-align:center;">
+            <div style="display:flex; gap:6px; justify-content:center;">
+              <button class="btn btn-secondary btn-sm" onclick="Admin.openPaperModal('${p.id}')" title="Sửa thông tin giấy">✏️ Sửa</button>
+              <button class="btn btn-secondary btn-sm" style="color:var(--accent-rose);" onclick="Admin.deletePaper('${p.id}', '${this.esc(p.name)}')" title="Xóa loại giấy">🗑️</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  openPaperModal(id) {
+    const p = id ? (this.papers || []).find(x => x.id === id) : null;
+    const modal = document.getElementById('modal-paper');
+    if (!modal) return;
+
+    document.getElementById('modal-paper-title').textContent = p ? '✏️ Sửa Loại Giấy' : '+ Thêm Loại Giấy Mới';
+    document.getElementById('paper-id').value = p ? p.id : '';
+    document.getElementById('paper-code').value = p ? p.code : '';
+    document.getElementById('paper-name').value = p ? p.name : '';
+    document.getElementById('paper-type').value = p ? p.paper_type : 'COUCHE';
+    document.getElementById('paper-gsm').value = p ? (p.gsm || 150) : 150;
+    document.getElementById('paper-sizespec').value = p ? (p.size_spec || '32x43') : '32x43';
+    document.getElementById('paper-unit').value = p ? (p.unit || 'tờ') : 'tờ';
+    document.getElementById('paper-cost-sheet').value = p ? (p.cost_per_sheet || 0) : 0;
+    document.getElementById('paper-cost-kg').value = p ? (p.cost_per_kg || 0) : 0;
+    document.getElementById('paper-notes').value = p ? (p.notes || '') : '';
+    document.getElementById('paper-active').value = (p && p.is_active === 0) ? '0' : '1';
+
+    modal.classList.add('active');
+  },
+
+  async savePaper() {
+    const id = document.getElementById('paper-id').value;
+    const code = document.getElementById('paper-code').value.trim();
+    const name = document.getElementById('paper-name').value.trim();
+    const paper_type = document.getElementById('paper-type').value;
+    const gsm = parseInt(document.getElementById('paper-gsm').value) || 150;
+    const size_spec = document.getElementById('paper-sizespec').value.trim() || '32x43';
+    const unit = document.getElementById('paper-unit').value.trim() || 'tờ';
+    const cost_per_sheet = parseFloat(document.getElementById('paper-cost-sheet').value) || 0;
+    const cost_per_kg = parseFloat(document.getElementById('paper-cost-kg').value) || 0;
+    const notes = document.getElementById('paper-notes').value.trim();
+    const is_active = parseInt(document.getElementById('paper-active').value) || 1;
+
+    if (!name) {
+      alert('Vui lòng nhập tên hiển thị của loại giấy!');
+      return;
+    }
+
+    const payload = { code, name, paper_type, gsm, size_spec, unit, cost_per_sheet, cost_per_kg, notes, is_active };
+
+    try {
+      const url = id ? `/papers/${id}` : '/papers';
+      const method = id ? 'PUT' : 'POST';
+      await this.api(url, method, payload);
+
+      alert(id ? '✅ Đã cập nhật loại giấy thành công!' : '✅ Đã thêm loại giấy mới thành công!');
+      if (window.App && window.App.closeModals) window.App.closeModals();
+      await this.loadPapers();
+      // Tải lại bảng giá vật tư chung & cập nhật dropdown giấy tính giá nếu có
+      this.loadPrices();
+      if (window.App && window.App.refreshPaperDropdowns) {
+        window.App.refreshPaperDropdowns();
+      }
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  },
+
+  async deletePaper(id, name) {
+    if (!confirm(`Bạn có chắc muốn xóa loại giấy "${name}" không?`)) return;
+    try {
+      await this.api(`/papers/${id}`, 'DELETE');
+      alert('✅ Đã xóa loại giấy thành công!');
+      await this.loadPapers();
+      this.loadPrices();
+      if (window.App && window.App.refreshPaperDropdowns) {
+        window.App.refreshPaperDropdowns();
       }
     } catch (err) {
       alert('Lỗi: ' + err.message);

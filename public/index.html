@@ -1277,11 +1277,60 @@
         <section class="tab-view" id="tab-admin">
           <div class="filter-tabs" id="admin-subtabs">
             <button class="filter-btn active" data-admin-sub="users">👤 Người Dùng & Phân Quyền</button>
+            <button class="filter-btn" data-admin-sub="papers">📄 Quản Lý Loại Giấy</button>
             <button class="filter-btn" data-admin-sub="presets">📦 Sản Phẩm Mẫu & Presets</button>
             <button class="filter-btn" data-admin-sub="template">🖨️ Thông Tin Mẫu In</button>
             <button class="filter-btn" data-admin-sub="prices">💲 Bảng Giá Vật Tư & Gia Công</button>
             <button class="filter-btn" data-admin-sub="pricecheck">✅ Kiểm Tra & Lịch Sử Giá</button>
             <button class="filter-btn" data-admin-sub="backup">💾 Sao Lưu & Khôi Phục Dữ Liệu</button>
+          </div>
+
+          <!-- PAPERS (QUẢN LÝ LOẠI GIẤY) -->
+          <div class="card-panel admin-sub" id="admin-sub-papers" style="display:none;">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h2 class="panel-title">📄 Danh Mục &amp; Bảng Giá Loại Giấy</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Quản lý chi tiết các loại giấy in (Couche, Fort, Ivory, Decal, Kraft...), định lượng GSM, giá vốn mua theo tờ/kg và quy cách sử dụng cho xưởng và báo giá.</p>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary btn-sm" onclick="Admin.openPaperModal()">+ Thêm Loại Giấy Mới</button>
+              </div>
+            </div>
+
+            <!-- Bộ lọc phân loại giấy & tìm kiếm -->
+            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+              <div class="filter-tabs" id="paper-group-filters" style="margin-bottom:0;">
+                <button type="button" class="filter-btn active" data-paper-type="ALL" onclick="Admin.filterPaperType('ALL')">Tất Cả</button>
+                <button type="button" class="filter-btn" data-paper-type="COUCHE" onclick="Admin.filterPaperType('COUCHE')">Couche (C)</button>
+                <button type="button" class="filter-btn" data-paper-type="FORT" onclick="Admin.filterPaperType('FORT')">Fort / Ford (F)</button>
+                <button type="button" class="filter-btn" data-paper-type="IVORY" onclick="Admin.filterPaperType('IVORY')">Ivory / Duplex</button>
+                <button type="button" class="filter-btn" data-paper-type="DECAL" onclick="Admin.filterPaperType('DECAL')">Decal (Giấy / Sữa / Trong)</button>
+                <button type="button" class="filter-btn" data-paper-type="KRAFT" onclick="Admin.filterPaperType('KRAFT')">Kraft / Mỹ Thuật</button>
+              </div>
+              <div style="flex:1; min-width:200px;">
+                <input type="text" id="paper-search-input" class="form-control" placeholder="🔍 Tìm kiếm mã giấy, tên loại giấy, định lượng gsm..." oninput="Admin.searchPapers(this.value)">
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table" id="admin-papers-table">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">Mã Giấy</th>
+                    <th style="width: 130px;">Nhóm Giấy</th>
+                    <th>Tên Loại Giấy</th>
+                    <th style="width: 110px; text-align: center;">Định Lượng</th>
+                    <th style="width: 110px;">Quy Cách</th>
+                    <th style="width: 130px; text-align: right; color:var(--accent-amber);">Giá Vốn Tờ</th>
+                    <th style="width: 130px; text-align: right; color:var(--text-muted);">Giá Vốn Kg</th>
+                    <th style="width: 140px; text-align: right; color:var(--accent-green);">Giá Gợi Ý (Tờ)</th>
+                    <th style="width: 90px; text-align: center;">Trạng Thái</th>
+                    <th style="width: 120px; text-align: center;">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-papers-tbody"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- USERS -->
@@ -2268,6 +2317,86 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
         <button class="btn btn-primary" onclick="Admin.savePreset()">💾 Lưu Sản Phẩm Mẫu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: QUẢN LÝ LOẠI GIẤY ==================== -->
+  <div class="modal-overlay" id="modal-paper">
+    <div class="modal-dialog" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 id="modal-paper-title">+ Thêm Loại Giấy Mới</h3>
+        <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="paper-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Mã Giấy *</label>
+            <input type="text" class="form-control" id="paper-code" placeholder="VD: C150, IV300, KRAFT250..." style="text-transform:uppercase;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nhóm Chất Liệu *</label>
+            <select class="form-control" id="paper-type">
+              <option value="COUCHE">Couche (Láng 2 mặt)</option>
+              <option value="FORT">Fort / Ford (Xốp, nhám)</option>
+              <option value="IVORY">Ivory / Duplex (Bao bì)</option>
+              <option value="BRISTOL">Bristol (Bìa láng)</option>
+              <option value="DECAL">Decal (Giấy / Nhựa)</option>
+              <option value="KRAFT">Kraft (Giấy xi măng)</option>
+              <option value="ART">Giấy Mỹ Thuật cao cấp</option>
+              <option value="OTHER">Chất liệu khác</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tên Hiển Thị Loại Giấy *</label>
+          <input type="text" class="form-control" id="paper-name" placeholder="VD: Couche 150 gsm (C150)">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Định Lượng (GSM) *</label>
+            <input type="number" class="form-control" id="paper-gsm" value="150" min="40" step="5">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Quy Cách Khổ Phôi Cắt / Chuẩn</label>
+            <input type="text" class="form-control" id="paper-sizespec" value="32x43" placeholder="VD: 32x43, 33x48.7, 65x86...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Đơn Vị Tính</label>
+            <input type="text" class="form-control" id="paper-unit" value="tờ" placeholder="tờ, kg, cuộn, m²...">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Giá Vốn Nhập Tờ (đ/tờ)</label>
+            <input type="number" class="form-control" id="paper-cost-sheet" value="0" min="0" step="50" placeholder="Giá nhập 1 tờ phôi">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Giá Vốn Theo Kg (đ/kg - Dùng cho Offset)</label>
+            <input type="number" class="form-control" id="paper-cost-kg" value="0" min="0" step="500" placeholder="Giá mua tính theo kg">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Ghi Chú / Ứng Dụng Phù Hợp</label>
+          <textarea class="form-control" id="paper-notes" rows="2" placeholder="VD: Chuyên in namecard, tag treo, thiệp mời, brochure..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Trạng Thái Kích Hoạt</label>
+          <select class="form-control" id="paper-active">
+            <option value="1" selected>Hoạt động (Hiển thị trong bảng tính giá)</option>
+            <option value="0">Tạm ngưng / Ẩn</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
+        <button class="btn btn-primary" onclick="Admin.savePaper()">💾 Lưu Loại Giấy</button>
       </div>
     </div>
   </div>
