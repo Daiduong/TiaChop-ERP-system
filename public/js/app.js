@@ -2947,8 +2947,28 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         })
       });
 
+      if (!res.ok) {
+        if (res.status === 401) {
+          alert('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.');
+          window.location.reload();
+          return;
+        }
+        let errMessage = 'Lỗi thao tác hàng loạt';
+        try {
+          const errData = await res.json();
+          errMessage = errData.error || errMessage;
+        } catch (_) {
+          const rawText = await res.text();
+          if (rawText.includes('<!DOCTYPE')) {
+            errMessage = 'Không thể kết nối đến máy chủ hoặc máy chủ đang khởi động lại (HTTP ' + res.status + '). Vui lòng thử lại sau vài giây.';
+          } else {
+            errMessage = rawText || errMessage;
+          }
+        }
+        throw new Error(errMessage);
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Lỗi thao tác hàng loạt');
 
       alert(`✅ Thành công! Đã ${sendNow ? 'gán và gửi' : 'gán'} ${data.count} lệnh in sang [${supplierName}].`);
       this.clearSupplierJobsSelection();
