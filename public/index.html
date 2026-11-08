@@ -1293,6 +1293,8 @@
                 <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Quản lý chi tiết các loại giấy in (Couche, Fort, Ivory, Decal, Kraft...), định lượng GSM, giá vốn mua theo tờ/kg và quy cách sử dụng cho xưởng và báo giá.</p>
               </div>
               <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary btn-sm" onclick="Admin.exportPapersExcel()" title="Xuất toàn bộ danh mục giấy ra file Excel">📥 Xuất Excel</button>
+                <button class="btn btn-secondary btn-sm" onclick="Admin.triggerImportPapers()" title="Nhập danh mục giấy hàng loạt từ file Excel">📤 Nhập Excel</button>
                 <button class="btn btn-primary btn-sm" onclick="Admin.openPaperModal()">+ Thêm Loại Giấy Mới</button>
               </div>
             </div>

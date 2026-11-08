@@ -1001,6 +1001,43 @@ window.Admin = {
     } catch (err) {
       alert('Lỗi: ' + err.message);
     }
+  },
+
+  exportPapersExcel() {
+    window.location.href = '/api/excel/papers/export';
+  },
+
+  triggerImportPapers() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx, .xls';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!confirm(`Xác nhận nhập danh sách loại giấy từ file [${file.name}]?`)) return;
+
+      try {
+        const buf = await file.arrayBuffer();
+        const res = await fetch('/api/excel/papers/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+          body: buf
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi nhập dữ liệu');
+
+        alert(`✅ ${data.message}`);
+        await this.loadPapers();
+        this.loadPrices();
+        if (window.App && window.App.refreshPaperDropdowns) {
+          window.App.refreshPaperDropdowns();
+        }
+      } catch (err) {
+        alert('Lỗi nhập Excel: ' + err.message);
+      }
+    };
+    input.click();
   }
 };
 

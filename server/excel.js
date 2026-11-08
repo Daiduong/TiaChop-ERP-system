@@ -582,5 +582,201 @@ router.get('/supplier-jobs/export', async (req, res) => {
   }
 });
 
+// ========================================================
+// 5. EXPORT & IMPORT: DANH MỤC LOẠI GIẤY (PAPERS)
+// ========================================================
+
+// Export danh mục giấy
+router.get('/papers/export', async (req, res) => {
+  try {
+    const papers = db.prepare('SELECT * FROM papers ORDER BY paper_type, gsm ASC, name ASC').all();
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Danh Mục Loại Giấy');
+
+    ws.columns = [
+      { header: 'STT', key: 'stt', width: 6 },
+      { header: 'Mã Giấy (*)', key: 'code', width: 14 },
+      { header: 'Tên Loại Giấy (*)', key: 'name', width: 30 },
+      { header: 'Nhóm Chất Liệu', key: 'paper_type', width: 18 },
+      { header: 'Định Lượng GSM', key: 'gsm', width: 16 },
+      { header: 'Khổ / Quy Cách', key: 'size_spec', width: 16 },
+      { header: 'Đơn Vị Tính', key: 'unit', width: 12 },
+      { header: 'Giá Vốn Tờ (đ)', key: 'cost_per_sheet', width: 16 },
+      { header: 'Giá Vốn Kg (đ)', key: 'cost_per_kg', width: 16 },
+      { header: 'Ghi Chú / Ứng Dụng', key: 'notes', width: 32 },
+      { header: 'Trạng Thái', key: 'status', width: 14 }
+    ];
+
+    styleHeaderRow(ws.getRow(1), '059669'); // Emerald Green
+
+    papers.forEach((p, idx) => {
+      const row = ws.addRow({
+        stt: idx + 1,
+        code: p.code || '',
+        name: p.name || '',
+        paper_type: p.paper_type || 'COUCHE',
+        gsm: p.gsm || 150,
+        size_spec: p.size_spec || '32x43',
+        unit: p.unit || 'tờ',
+        cost_per_sheet: p.cost_per_sheet || 0,
+        cost_per_kg: p.cost_per_kg || 0,
+        notes: p.notes || '',
+        status: p.is_active ? 'Hoạt động' : 'Tạm ẩn'
+      });
+
+      styleDataRow(row);
+      row.getCell('stt').alignment = { horizontal: 'center' };
+      row.getCell('code').alignment = { horizontal: 'center' };
+      row.getCell('paper_type').alignment = { horizontal: 'center' };
+      row.getCell('gsm').alignment = { horizontal: 'center' };
+      row.getCell('size_spec').alignment = { horizontal: 'center' };
+      row.getCell('unit').alignment = { horizontal: 'center' };
+      row.getCell('status').alignment = { horizontal: 'center' };
+      row.getCell('cost_per_sheet').numFmt = '#,##0';
+      row.getCell('cost_per_kg').numFmt = '#,##0';
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=DM_LoaiGiay_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    const buffer = await wb.xlsx.writeBuffer();
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi xuất Excel danh mục giấy: ' + err.message });
+  }
+});
+
+// Import danh mục giấy
+router.post('/papers/import', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
+  try {
+    if (!req.body || req.body.length === 0) {
+      return res.status(400).json({ error: 'File Excel không có nội dung' });
+    }
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(req.body);
+    const ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ error: 'File không có trang tính (Sheet)' });
+
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    const findRow = db.prepare('SELECT id, code FROM papers WHERE code = ?');
+    const insertStmt = db.prepare(`
+      INSERT INTO papers (id, code, name, paper_type, gsm, size_spec, unit, cost_per_sheet, cost_per_kg, notes, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updateStmt = db.prepare(`
+      UPDATE papers SET
+        name = ?,
+        paper_type = ?,
+        gsm = ?,
+        size_spec = ?,
+        unit = ?,
+        cost_per_sheet = ?,
+        cost_per_kg = ?,
+        notes = ?,
+        is_active = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const syncConfigStmt = db.prepare(`
+      INSERT INTO print_configs (id, category, name, code, base_cost, unit, metadata)
+      VALUES (?, 'PAPER', ?, ?, ?, ?, ?)
+      ON CONFLICT(code) DO UPDATE SET
+        name = excluded.name,
+        base_cost = excluded.base_cost,
+        unit = excluded.unit,
+        metadata = excluded.metadata
+    `);
+
+    // Duyệt qua từng dòng dữ liệu (bỏ qua header dòng 1)
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      const getVal = (idx) => {
+        const val = row.getCell(idx).value;
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'object' && val.text) return String(val.text).trim();
+        if (typeof val === 'object' && val.result !== undefined) return String(val.result).trim();
+        return String(val).trim();
+      };
+
+      const getNum = (idx, def = 0) => {
+        const val = row.getCell(idx).value;
+        if (val === null || val === undefined || val === '') return def;
+        if (typeof val === 'object' && val.result !== undefined) return Number(val.result) || def;
+        const n = Number(String(val).replace(/[^0-9.-]/g, ''));
+        return isNaN(n) ? def : n;
+      };
+
+      // Header: 1:STT, 2:Mã Giấy, 3:Tên Loại Giấy, 4:Nhóm Chất Liệu, 5:GSM, 6:Khổ, 7:ĐVT, 8:Giá Vốn Tờ, 9:Giá Vốn Kg, 10:Ghi Chú, 11:Trạng Thái
+      let code = getVal(2).toUpperCase();
+      const name = getVal(3);
+      if (!name) {
+        skipped++;
+        return;
+      }
+
+      if (!code) {
+        code = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 15);
+      }
+
+      let paperType = getVal(4).toUpperCase();
+      const validTypes = ['COUCHE', 'FORT', 'IVORY', 'BRISTOL', 'DECAL', 'KRAFT', 'ART', 'OTHER'];
+      if (!validTypes.includes(paperType)) {
+        if (paperType.includes('COUCH')) paperType = 'COUCHE';
+        else if (paperType.includes('FOR')) paperType = 'FORT';
+        else if (paperType.includes('IVOR') || paperType.includes('DUPLEX')) paperType = 'IVORY';
+        else if (paperType.includes('BRIS')) paperType = 'BRISTOL';
+        else if (paperType.includes('DECAL')) paperType = 'DECAL';
+        else if (paperType.includes('KRAFT')) paperType = 'KRAFT';
+        else if (paperType.includes('THUẬT') || paperType.includes('ART')) paperType = 'ART';
+        else paperType = 'COUCHE';
+      }
+
+      const gsm = getNum(5, 150);
+      const sizeSpec = getVal(6) || '32x43';
+      const unit = getVal(7) || 'tờ';
+      const costSheet = getNum(8, 0);
+      const costKg = getNum(9, 0);
+      const notes = getVal(10);
+      const statusText = getVal(11).toLowerCase();
+      const isActive = (statusText.includes('ẩn') || statusText.includes('tắt') || statusText === '0') ? 0 : 1;
+
+      const existing = findRow.get(code);
+      if (existing) {
+        updateStmt.run(name, paperType, gsm, sizeSpec, unit, costSheet, costKg, notes, isActive, existing.id);
+        updated++;
+      } else {
+        const newId = `paper_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        insertStmt.run(newId, code, name, paperType, gsm, sizeSpec, unit, costSheet, costKg, notes, isActive);
+        imported++;
+      }
+
+      // Sync print_configs
+      try {
+        syncConfigStmt.run(
+          `cfg_paper_${code.toLowerCase()}`,
+          name,
+          code,
+          costSheet,
+          `${unit} ${sizeSpec}`,
+          JSON.stringify({ gsm, paper_type: paperType })
+        );
+      } catch (errSync) {}
+    });
+
+    res.json({
+      success: true,
+      message: `Đã nhập xong danh mục giấy: thêm mới ${imported}, cập nhật ${updated}, bỏ qua ${skipped} dòng trống.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi khi import file Excel: ' + err.message });
+  }
+});
+
 module.exports = router;
 
