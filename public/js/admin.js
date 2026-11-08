@@ -610,6 +610,7 @@ window.Admin = {
           <td style="font-size:12px; color:var(--text-secondary); max-width:260px;">${specStr}</td>
           <td style="text-align: center; white-space:nowrap;">
             <button class="btn btn-secondary btn-sm" style="padding:2px 8px; font-size:11px; margin-right:4px;" onclick="Admin.usePresetInPricing('${p.id}')" title="Đưa vào bộ tính giá">⚡ Tính Giá</button>
+            <button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:11px; margin-right:4px;" onclick="Admin.duplicatePreset('${p.id}')" title="Nhân bản (copy) sản phẩm mẫu">📋</button>
             <button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:11px; margin-right:4px;" onclick="Admin.openPresetModal('${p.id}')" title="Chỉnh sửa">✏️</button>
             <button class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:11px;" onclick="Admin.deletePreset('${p.id}', '${p.name.replace(/'/g, "\\'")}')" title="Xóa">🗑️</button>
           </td>
@@ -734,6 +735,26 @@ window.Admin = {
     }
 
     document.getElementById('modal-preset').classList.add('active');
+  },
+
+  duplicatePreset(id) {
+    const p = this.presets.find(x => x.id === id);
+    if (!p) return;
+    this.openPresetModal(id);
+    // Chuyển sang chế độ tạo mới (nhân bản)
+    document.getElementById('modal-preset-title').textContent = `📋 Nhân Bản Từ [${p.code}] - Tạo Mẫu Mới`;
+    document.getElementById('preset-id').value = '';
+    const codeEl = document.getElementById('preset-code');
+    codeEl.disabled = false;
+    codeEl.value = `${p.code}_COPY`;
+    document.getElementById('preset-name').value = `${p.name} (Bản sao)`;
+    const groupEl = document.getElementById('preset-group');
+    groupEl.disabled = false;
+    document.getElementById('preset-sort').value = this.presets.length + 1;
+    setTimeout(() => {
+      codeEl.focus();
+      codeEl.select();
+    }, 100);
   },
 
   async savePreset() {
@@ -920,6 +941,7 @@ window.Admin = {
           <td style="text-align:center;">${statusBadge}</td>
           <td style="text-align:center;">
             <div style="display:flex; gap:6px; justify-content:center;">
+              <button class="btn btn-secondary btn-sm" onclick="Admin.duplicatePaper('${p.id}')" title="Nhân bản (copy) loại giấy này để tạo mới nhanh">📋 Nhân bản</button>
               <button class="btn btn-secondary btn-sm" onclick="Admin.openPaperModal('${p.id}')" title="Sửa thông tin giấy">✏️ Sửa</button>
               <button class="btn btn-secondary btn-sm" style="color:var(--accent-rose);" onclick="Admin.deletePaper('${p.id}', '${this.esc(p.name)}')" title="Xóa loại giấy">🗑️</button>
             </div>
@@ -948,6 +970,40 @@ window.Admin = {
     document.getElementById('paper-active').value = (p && p.is_active === 0) ? '0' : '1';
 
     modal.classList.add('active');
+  },
+
+  duplicatePaper(id) {
+    const p = (this.papers || []).find(x => x.id === id);
+    if (!p) return;
+    const modal = document.getElementById('modal-paper');
+    if (!modal) return;
+
+    // Sinh mã giấy mới gợi ý để không trùng mã cũ
+    let newCode = p.code + '_COPY';
+    let counter = 1;
+    while (this.papers.some(x => x.code === newCode)) {
+      counter++;
+      newCode = `${p.code}_COPY${counter}`;
+    }
+
+    document.getElementById('modal-paper-title').textContent = `📋 Nhân Bản Từ [${p.code}] - Tạo Loại Giấy Mới`;
+    document.getElementById('paper-id').value = ''; // Để trống để khi lưu sẽ tạo mới thay vì cập nhật
+    document.getElementById('paper-code').value = newCode;
+    document.getElementById('paper-name').value = `${p.name} (Bản sao)`;
+    document.getElementById('paper-type').value = p.paper_type || 'COUCHE';
+    document.getElementById('paper-gsm').value = p.gsm || 150;
+    document.getElementById('paper-sizespec').value = p.size_spec || '32x43';
+    document.getElementById('paper-unit').value = p.unit || 'tờ';
+    document.getElementById('paper-cost-sheet').value = p.cost_per_sheet || 0;
+    document.getElementById('paper-cost-kg').value = p.cost_per_kg || 0;
+    document.getElementById('paper-notes').value = p.notes || '';
+    document.getElementById('paper-active').value = '1';
+
+    modal.classList.add('active');
+    setTimeout(() => {
+      const codeInput = document.getElementById('paper-code');
+      if (codeInput) { codeInput.focus(); codeInput.select(); }
+    }, 100);
   },
 
   async savePaper() {
