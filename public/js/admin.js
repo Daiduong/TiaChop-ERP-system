@@ -169,6 +169,10 @@ window.Admin = {
       const data = this.readForm();
       await this.api('/settings', 'PUT', data);
       this.settings = { ...this.settings, ...data };
+      // Đồng bộ ngay sang App.state.settings để mọi chức năng in dùng được ngay
+      if (window.App && window.App.state) {
+        window.App.state.settings = { ...this.settings };
+      }
       alert('Đã lưu thông tin mẫu in! Các phiếu Báo giá / Lệnh xưởng sẽ dùng thông tin mới.');
     } catch (e) { alert(e.message); }
   },

@@ -355,10 +355,26 @@ const App = {
       const res = await fetch('/api/settings');
       if (res.ok) {
         this.state.settings = await res.json();
+        // Luôn đồng bộ với window.Admin.settings để các hàm in ấn và preview dùng chung
+        if (window.Admin) {
+          window.Admin.settings = { ...this.state.settings };
+        }
       }
     } catch (e) {
       console.error('Error loading settings:', e);
     }
+  },
+
+  async getPrintSettings() {
+    // Nếu chưa có settings hoặc thiếu các trường cơ bản, tự động fetch lại từ server
+    if (!this.state.settings || !this.state.settings.company_name) {
+      await this.loadSettings();
+    }
+    const S = this.state.settings || (window.Admin && Admin.settings) || {};
+    if (window.Admin && !Admin.settings?.company_name) {
+      window.Admin.settings = { ...S };
+    }
+    return S;
   },
 
   // ==========================================
@@ -3013,7 +3029,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     }
   },
 
-  printSupplierBatchTicket(supplierId, supplierName, filterStatus = 'ALL') {
+  async printSupplierBatchTicket(supplierId, supplierName, filterStatus = 'ALL') {
     let items = (this.state.supplierJobs || []).filter(j => j.supplier_id === supplierId);
     if (filterStatus && filterStatus !== 'ALL') {
       items = items.filter(j => j.status === filterStatus);
@@ -3027,7 +3043,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const printable = document.getElementById('printable-area');
     if (!printable) return;
 
-    const S = (window.Admin && Admin.settings) || {};
+    const S = await this.getPrintSettings();
     const C = S.primary_color || '#0284c7';
     const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
     const totalCost = items.reduce((sum, it) => sum + (Number(it.total_cost) || 0), 0);
@@ -3110,7 +3126,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
       <div style="margin-top:16px; border:1px solid #cbd5e1; border-radius:4px; padding:10px 12px; font-size:9pt; background:#f8fafc; line-height:1.5;">
         <strong style="color:#0f172a;">Yêu cầu kỹ thuật & chất lượng từ Tia Chớp:</strong>
-        ${((window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '').split('\n').filter(Boolean).map((l, i) => `<div>${i + 1}. ${l}</div>`).join('')}
+        ${((S.job_ticket_requirements || (window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '')).split('\n').filter(Boolean).map((l, i) => `<div>${i + 1}. ${l}</div>`).join('')}
         <div style="margin-top:4px; color:#64748b; font-style:italic;">* Xưởng vui lòng kiểm tra file in, kiểm tra màu sắc bản in mẫu và bàn giao đúng tiến độ cam kết.</div>
       </div>
 
@@ -3368,7 +3384,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const order = this.state.orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const S = (window.Admin && Admin.settings) || {};
+    const S = await this.getPrintSettings();
     const C = S.primary_color || '#0284c7';
     const lines = t => (t || '').split('\n').filter(Boolean).map(l => `<div>• ${l}</div>`).join('');
     const printable = document.getElementById('printable-area');
@@ -3492,11 +3508,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     window.print();
   },
 
-  printJobTicket(orderId) {
+  async printJobTicket(orderId) {
     const order = this.state.orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const S = (window.Admin && Admin.settings) || {};
+    const S = await this.getPrintSettings();
     const C = S.primary_color || '#0284c7';
     const printable = document.getElementById('printable-area');
     printable.innerHTML = `
@@ -3555,7 +3571,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
       <div class="print-terms">
         <div style="font-weight:700; color:#0f172a; margin-bottom:3px;">Yêu cầu kỹ thuật &amp; Chất lượng từ In Tia Chớp:</div>
-        ${((window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '').split('\n').filter(Boolean).map((l, i) => `<div>• ${l}</div>`).join('')}
+        ${((S.job_ticket_requirements || (window.Admin && Admin.settings && Admin.settings.job_ticket_requirements) || '')).split('\n').filter(Boolean).map((l, i) => `<div>• ${l}</div>`).join('')}
       </div>
 
       <div class="print-signatures">
@@ -3589,7 +3605,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         return;
       }
 
-      const S = (window.Admin && Admin.settings) || {};
+      const S = await this.getPrintSettings();
       const C = S.primary_color || '#0284c7';
       const printable = document.getElementById('printable-area');
 

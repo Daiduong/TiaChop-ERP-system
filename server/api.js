@@ -227,6 +227,15 @@ router.get('/suppliers/jobs', (req, res) => {
       JOIN customers c ON o.customer_id = c.id
       LEFT JOIN suppliers s ON oi.supplier_id = s.id
       WHERE o.type = 'ORDER'
+        AND LOWER(oi.item_name) NOT LIKE '%giao hàng%'
+        AND LOWER(oi.item_name) NOT LIKE '%vận chuyển%'
+        AND LOWER(oi.item_name) NOT LIKE '%xe máy%'
+        AND LOWER(oi.item_name) NOT LIKE '%ahamove%'
+        AND LOWER(oi.item_name) NOT LIKE '%grab%'
+        AND LOWER(oi.item_name) NOT LIKE '%ghtk%'
+        AND LOWER(oi.item_name) NOT LIKE '%viettel post%'
+        AND LOWER(oi.item_name) NOT LIKE '%chành xe%'
+        AND LOWER(oi.unit) NOT IN ('chuyến', 'lượt ship')
     `;
     const params = [];
 
