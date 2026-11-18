@@ -3790,11 +3790,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 </span>
               </div>
             ` : ''}
-            ${isCodHidden ? `
-              <div style="font-size:10pt; font-weight:700; color:#15803d; margin-top:3px; white-space:nowrap; background:#dcfce7; padding:4px 8px; border-radius:4px; display:inline-block;">
-                ✓ KHÔNG THU HỘ (Giao theo hợp đồng / Đã thanh toán)
-              </div>
-            ` : `
+            ${isCodHidden ? '' : `
               <div style="font-size:11pt; font-weight:800; color:#b91c1c; margin-top:3px; white-space:nowrap;">
                 TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatNumber(order.remaining_amount) + ' đ' : '0 đ (Đã thanh toán đủ)'}
               </div>
