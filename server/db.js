@@ -485,6 +485,16 @@ function seedInitialData() {
   console.log('✅ Nạp dữ liệu mẫu ban đầu thành công!');
 }
 
+// Migration tự động đảm bảo các cột cần thiết tồn tại
+(function runMigrations() {
+  try {
+    db.exec('ALTER TABLE orders ADD COLUMN show_cod_on_delivery INTEGER DEFAULT 1');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE customers ADD COLUMN default_show_cod INTEGER DEFAULT 1');
+  } catch (e) {}
+})();
+
 initDatabase();
 
 module.exports = {

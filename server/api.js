@@ -147,15 +147,16 @@ router.get('/customers', (req, res) => {
 
 router.post('/customers', (req, res) => {
   try {
-    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, notes, contacts } = req.body;
+    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes, contacts } = req.body;
     const id = generateId('kh');
     const autoCode = code || `KH${Date.now().toString().slice(-4)}`;
+    const showCod = (default_show_cod === 0 || default_show_cod === '0' || default_show_cod === false) ? 0 : 1;
 
     const insert = db.prepare(`
-      INSERT INTO customers (id, code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, notes, created_by_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO customers (id, code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    insert.run(id, autoCode, name, phone || '', email || '', address || '', customer_group || 'RETAIL', tax_company || '', tax_code || '', tax_email || '', default_discount || 0, notes || '', req.user?.id || null);
+    insert.run(id, autoCode, name, phone || '', email || '', address || '', customer_group || 'RETAIL', tax_company || '', tax_code || '', tax_email || '', default_discount || 0, showCod, notes || '', req.user?.id || null);
 
     // Lưu người liên hệ nếu có
     if (Array.isArray(contacts)) {
@@ -171,6 +172,47 @@ router.post('/customers', (req, res) => {
     }
 
     res.json({ success: true, id, code: autoCode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật thông tin khách hàng
+router.put('/customers/:id', (req, res) => {
+  try {
+    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes } = req.body;
+    const existing = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
+
+    const showCod = (default_show_cod !== undefined && default_show_cod !== null)
+      ? ((default_show_cod === 0 || default_show_cod === '0' || default_show_cod === false) ? 0 : 1)
+      : (existing.default_show_cod !== undefined ? existing.default_show_cod : 1);
+
+    db.prepare(`
+      UPDATE customers SET
+        code = COALESCE(?, code),
+        name = COALESCE(?, name),
+        phone = COALESCE(?, phone),
+        email = COALESCE(?, email),
+        address = COALESCE(?, address),
+        customer_group = COALESCE(?, customer_group),
+        tax_company = COALESCE(?, tax_company),
+        tax_code = COALESCE(?, tax_code),
+        tax_email = COALESCE(?, tax_email),
+        default_discount = COALESCE(?, default_discount),
+        default_show_cod = ?,
+        notes = COALESCE(?, notes)
+      WHERE id = ?
+    `).run(
+      code || null, name || null, phone || null, email || null, address || null,
+      customer_group || null, tax_company || null, tax_code || null, tax_email || null,
+      default_discount !== undefined ? default_discount : null,
+      showCod,
+      notes !== undefined ? notes : null,
+      req.params.id
+    );
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -518,7 +560,7 @@ router.get('/orders/:id', (req, res) => {
     const order = db.prepare(`
       SELECT o.*, c.name as customer_name, c.code as customer_code, c.phone as customer_phone,
         c.email as customer_email, c.address as customer_full_address,
-        c.tax_company, c.tax_code, c.tax_email,
+        c.tax_company, c.tax_code, c.tax_email, c.default_show_cod,
         ct.name as contact_name, ct.phone as contact_phone
       FROM orders o
       JOIN customers c ON o.customer_id = c.id
@@ -567,6 +609,7 @@ router.post('/orders', (req, res) => {
       vat_rate = 8,
       discount_amount = 0,
       deposit_amount = 0,
+      show_cod_on_delivery,
       notes = '',
       items = []
     } = req.body;
@@ -621,20 +664,31 @@ router.post('/orders', (req, res) => {
     // Nếu là ĐƠN HÀNG -> ORDER_CONFIRMED (Đã chốt in, bất kể có cọc ngay hay nợ công nợ B2B)
     const initialStatus = type === 'QUOTE' ? 'QUOTE_SENT' : 'ORDER_CONFIRMED';
 
+    // Xác định mặc định hiển thị COD: ưu tiên body truyền lên, nếu không lấy theo default_show_cod của KH (mặc định 1)
+    let showCod = 1;
+    if (show_cod_on_delivery !== undefined && show_cod_on_delivery !== null) {
+      showCod = (show_cod_on_delivery === 0 || show_cod_on_delivery === '0' || show_cod_on_delivery === false) ? 0 : 1;
+    } else {
+      const custPref = db.prepare('SELECT default_show_cod FROM customers WHERE id = ?').get(customer_id);
+      if (custPref && custPref.default_show_cod !== null && custPref.default_show_cod !== undefined) {
+        showCod = custPref.default_show_cod ? 1 : 0;
+      }
+    }
+
     const insertOrder = db.prepare(`
       INSERT INTO orders (
         id, code, type, customer_id, contact_id, status, delivery_deadline, shipping_address,
         shipping_fee, shipping_payer, shipping_method, tracking_code, recipient_name, recipient_phone, delivery_notes,
         vat_rate, vat_amount, discount_amount, total_selling, total_cost, gross_profit,
-        deposit_amount, remaining_amount, payment_status, notes, created_by, created_by_user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        deposit_amount, remaining_amount, payment_status, notes, created_by, created_by_user_id, show_cod_on_delivery
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insertOrder.run(
       id, code, type, customer_id, contact_id || null, initialStatus, delivery_deadline || null, shipping_address || '',
       parsedShippingFee, payer, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost, gross_profit,
-      parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trần', req.user?.id || null
+      parsedDeposit, remaining_amount, payment_status, notes, req.user?.full_name || 'Dương Trần', req.user?.id || null, showCod
     );
 
     // Lưu các line items
@@ -699,6 +753,7 @@ router.put('/orders/:id', (req, res) => {
       recipient_name = '',
       recipient_phone = '',
       delivery_notes = '',
+      show_cod_on_delivery,
       vat_rate = 8,
       discount_amount = 0,
       notes = '',
@@ -737,20 +792,24 @@ router.put('/orders/:id', (req, res) => {
     if (totalPaid >= grand_total && grand_total > 0) payment_status = 'PAID';
     else if (totalPaid > 0) payment_status = 'PARTIAL';
 
+    const showCodVal = (show_cod_on_delivery !== undefined && show_cod_on_delivery !== null)
+      ? ((show_cod_on_delivery === 0 || show_cod_on_delivery === '0' || show_cod_on_delivery === false) ? 0 : 1)
+      : (order.show_cod_on_delivery !== undefined ? order.show_cod_on_delivery : 1);
+
     // Update bảng orders
     db.prepare(`
       UPDATE orders SET
         customer_id = ?, contact_id = ?, delivery_deadline = ?, shipping_address = ?,
         shipping_fee = ?, shipping_payer = ?, shipping_method = ?, tracking_code = ?, recipient_name = ?, recipient_phone = ?, delivery_notes = ?,
         vat_rate = ?, vat_amount = ?, discount_amount = ?, total_selling = ?, total_cost = ?,
-        gross_profit = ?, remaining_amount = ?, payment_status = ?, notes = ?,
+        gross_profit = ?, remaining_amount = ?, payment_status = ?, notes = ?, show_cod_on_delivery = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       customer_id, contact_id || null, delivery_deadline || null, shipping_address || '',
       parsedShippingFee, payer, shipping_method || '', tracking_code || '', recipient_name || '', recipient_phone || '', delivery_notes || '',
       parsedVatRate, vat_amount, parsedDiscount, grand_total, total_cost,
-      gross_profit, remaining_amount, payment_status, notes,
+      gross_profit, remaining_amount, payment_status, notes, showCodVal,
       req.params.id
     );
 
@@ -847,7 +906,8 @@ router.patch('/orders/:id/delivery', (req, res) => {
       recipient_name,
       recipient_phone,
       shipping_address,
-      delivery_notes
+      delivery_notes,
+      show_cod_on_delivery
     } = req.body;
 
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
@@ -881,6 +941,9 @@ router.patch('/orders/:id/delivery', (req, res) => {
     const newGrossProfit = order.gross_profit + oldShopShip - newShopShip;
 
     const newStatus = status || order.status;
+    const showCodVal = (show_cod_on_delivery !== undefined && show_cod_on_delivery !== null)
+      ? ((show_cod_on_delivery === 0 || show_cod_on_delivery === '0' || show_cod_on_delivery === false) ? 0 : 1)
+      : (order.show_cod_on_delivery !== undefined ? order.show_cod_on_delivery : 1);
 
     db.prepare(`
       UPDATE orders SET
@@ -896,6 +959,7 @@ router.patch('/orders/:id/delivery', (req, res) => {
         total_selling = ?,
         remaining_amount = ?,
         gross_profit = ?,
+        show_cod_on_delivery = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -911,6 +975,7 @@ router.patch('/orders/:id/delivery', (req, res) => {
       newGrandTotal,
       newRemaining,
       newGrossProfit,
+      showCodVal,
       req.params.id
     );
 

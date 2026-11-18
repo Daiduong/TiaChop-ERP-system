@@ -1683,6 +1683,13 @@
                 <input type="text" id="form-order-tracking-code" class="form-control" placeholder="Mã theo dõi / BKS xe / dặn dò tài xế">
               </div>
             </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(56, 189, 248, 0.2); display: flex; align-items: center; justify-content: space-between;">
+              <label class="checkbox-label" style="font-size: 13px; font-weight: 600; color: var(--text-main); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="form-order-show-cod" checked style="width: 16px; height: 16px;">
+                <span>💵 Hiển thị số tiền thu hộ (COD) trên Phiếu Giao Hàng</span>
+              </label>
+              <span style="font-size: 11.5px; color: var(--text-dim);">(Bỏ tích nếu là đơn công nợ / đại lý không muốn lộ số tiền)</span>
+            </div>
           </div>
 
           <!-- Chi tiết sản phẩm in (Line Items) -->
@@ -1901,6 +1908,16 @@
           <label class="form-label">Ghi Chú Giao Hàng / Dặn Dò Shipper</label>
           <textarea id="delivery-form-notes" class="form-control" rows="2" placeholder="Thu COD bao nhiêu tiền, gọi trước khi giao, hàng dễ gãy móp..."></textarea>
         </div>
+
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1px dashed var(--accent-amber); padding: 10px 14px; border-radius: var(--radius-md); margin-top: 10px;">
+          <label class="checkbox-label" style="font-size: 13px; font-weight: 700; color: var(--text-main); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="delivery-form-show-cod" checked style="width: 17px; height: 17px;">
+            <span>💵 Hiển thị tiền thu hộ (COD) trên phiếu in</span>
+          </label>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 3px; padding-left: 25px;">
+            Nếu khách hàng đã chuyển khoản trước hoặc là đại lý công nợ, bỏ chọn để trên phiếu giao hàng in ra dòng <em>"Không thu hộ (Giao theo hợp đồng / Đã thanh toán)"</em>.
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.closeModals()">Đóng</button>
@@ -1910,14 +1927,15 @@
     </div>
   </div>
 
-  <!-- ==================== MODAL: THÊM KHÁCH HÀNG MỚI ==================== -->
+  <!-- ==================== MODAL: KHÁCH HÀNG (THÊM / SỬA) ==================== -->
   <div class="modal-overlay" id="modal-customer">
     <div class="modal-dialog" style="max-width: 600px;">
       <div class="modal-header">
-        <h3>+ Thêm Khách Hàng Mới</h3>
+        <h3 id="modal-customer-title">+ Thêm Khách Hàng Mới</h3>
         <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
       </div>
       <div class="modal-body">
+        <input type="hidden" id="cust-id">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Mã KH (Viết tắt)</label>
@@ -1955,6 +1973,17 @@
           <input type="text" id="cust-address" class="form-control" placeholder="Địa chỉ giao nhận hàng">
         </div>
 
+        <div class="form-group" style="margin-top: 10px;">
+          <label class="form-label">Chính Sách COD Mặc Định Khi In Phiếu Giao</label>
+          <select id="cust-default-show-cod" class="form-control">
+            <option value="1" selected>💵 Luôn hiện số tiền thu hộ (COD) trên phiếu giao</option>
+            <option value="0">🔒 Ẩn số tiền thu hộ (Khách công nợ / đại lý / chuyển khoản trước)</option>
+          </select>
+          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px;">
+            Khi lên đơn mới cho khách hàng này, hệ thống sẽ tự động áp dụng tùy chọn hiển thị COD theo cấu hình ở đây.
+          </div>
+        </div>
+
         <div style="margin-top: 14px; padding: 12px; background: rgba(0,0,0,0.15); border-radius: var(--radius-md);">
           <h4 style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">Thông Tin Xuất Hóa Đơn VAT (Tùy chọn)</h4>
           <div class="form-group">
@@ -1975,7 +2004,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
-        <button type="button" class="btn btn-primary" onclick="App.saveCustomer()">Lưu Khách Hàng</button>
+        <button type="button" class="btn btn-primary" id="btn-save-customer" onclick="App.saveCustomer()">Lưu Khách Hàng</button>
       </div>
     </div>
   </div>

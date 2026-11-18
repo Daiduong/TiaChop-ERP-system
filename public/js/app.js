@@ -2004,6 +2004,12 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('form-order-tracking-code').value = o.tracking_code || '';
       document.getElementById('form-order-recipient-name').value = o.recipient_name || '';
       document.getElementById('form-order-recipient-phone').value = o.recipient_phone || '';
+      const showCodBox = document.getElementById('form-order-show-cod');
+      if (showCodBox) {
+        showCodBox.checked = (o.show_cod_on_delivery !== undefined && o.show_cod_on_delivery !== null)
+          ? !!o.show_cod_on_delivery
+          : true;
+      }
       document.getElementById('form-order-discount').value = o.discount_amount || 0;
       document.getElementById('form-order-vat-rate').value = o.vat_rate ?? 0;
       // Ô deposit ẩn khi edit (không tạo giao dịch mới tự động)
@@ -2138,6 +2144,12 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     // Auto set discount
     if (customer.default_discount > 0) {
       // Sẽ tính theo % khi tổng đơn được tính
+    }
+
+    // Auto set show COD checkbox theo chính sách mặc định của khách hàng
+    const showCodCheckbox = document.getElementById('form-order-show-cod');
+    if (showCodCheckbox && customer.default_show_cod !== undefined && customer.default_show_cod !== null) {
+      showCodCheckbox.checked = customer.default_show_cod ? true : false;
     }
 
     this.calculateOrderTotals();
@@ -2327,6 +2339,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const trackingCode = document.getElementById('form-order-tracking-code')?.value || '';
     const recipientName = document.getElementById('form-order-recipient-name')?.value || '';
     const recipientPhone = document.getElementById('form-order-recipient-phone')?.value || '';
+    const showCodOnDelivery = document.getElementById('form-order-show-cod') ? (document.getElementById('form-order-show-cod').checked ? 1 : 0) : 1;
     const discount = parseFloat(document.getElementById('form-order-discount').value) || 0;
     const vatRate = parseFloat(document.getElementById('form-order-vat-rate').value) || 0;
     const deposit = parseFloat(document.getElementById('form-order-deposit').value) || 0;
@@ -2378,6 +2391,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         tracking_code: trackingCode,
         recipient_name: recipientName,
         recipient_phone: recipientPhone,
+        show_cod_on_delivery: showCodOnDelivery,
         discount_amount: discount,
         vat_rate: vatRate,
         notes,
@@ -2495,6 +2509,17 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('delivery-form-recipient-phone').value = o.recipient_phone || o.contact_phone || o.customer_phone || '';
       document.getElementById('delivery-form-address').value = o.shipping_address || o.customer_full_address || '';
       document.getElementById('delivery-form-notes').value = o.delivery_notes || '';
+      const deliveryShowCod = document.getElementById('delivery-form-show-cod');
+      if (deliveryShowCod) {
+        // Ưu tiên show_cod_on_delivery của đơn, nếu chưa có thì lấy theo default_show_cod của KH
+        if (o.show_cod_on_delivery !== undefined && o.show_cod_on_delivery !== null) {
+          deliveryShowCod.checked = !!o.show_cod_on_delivery;
+        } else if (o.default_show_cod !== undefined && o.default_show_cod !== null) {
+          deliveryShowCod.checked = !!o.default_show_cod;
+        } else {
+          deliveryShowCod.checked = true;
+        }
+      }
 
       document.getElementById('modal-delivery').classList.add('active');
     } catch (err) {
@@ -2515,6 +2540,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const recipient_phone = document.getElementById('delivery-form-recipient-phone').value.trim();
     const shipping_address = document.getElementById('delivery-form-address').value.trim();
     const delivery_notes = document.getElementById('delivery-form-notes').value.trim();
+    const show_cod_on_delivery = document.getElementById('delivery-form-show-cod') ? (document.getElementById('delivery-form-show-cod').checked ? 1 : 0) : 1;
 
     try {
       const res = await fetch(`/api/orders/${orderId}/delivery`, {
@@ -2529,7 +2555,8 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           recipient_name,
           recipient_phone,
           shipping_address,
-          delivery_notes
+          delivery_notes,
+          show_cod_on_delivery
         })
       });
 
@@ -3263,7 +3290,10 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               </span>
             </td>
             <td class="cell-nowrap">
-              <button class="btn btn-secondary btn-sm" onclick="App.openNewOrderForCustomer('${c.id}')">+ Lên Đơn</button>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="App.openEditCustomerModal('${c.id}')" title="Chỉnh sửa thông tin khách hàng">✏️ Sửa</button>
+                <button class="btn btn-primary btn-sm" onclick="App.openNewOrderForCustomer('${c.id}')">+ Lên Đơn</button>
+              </div>
             </td>
           </tr>
         `;
@@ -3274,10 +3304,47 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   },
 
   openNewCustomerModal() {
+    document.getElementById('modal-customer-title').textContent = '+ Thêm Khách Hàng Mới';
+    document.getElementById('btn-save-customer').textContent = 'Lưu Khách Hàng';
+    document.getElementById('cust-id').value = '';
+    document.getElementById('cust-code').value = '';
+    document.getElementById('cust-group').value = 'CORPORATE';
+    document.getElementById('cust-name').value = '';
+    document.getElementById('cust-phone').value = '';
+    document.getElementById('cust-discount').value = '0';
+    document.getElementById('cust-address').value = '';
+    document.getElementById('cust-default-show-cod').value = '1';
+    document.getElementById('cust-tax-company').value = '';
+    document.getElementById('cust-tax-code').value = '';
+    document.getElementById('cust-tax-email').value = '';
+    document.getElementById('modal-customer').classList.add('active');
+  },
+
+  openEditCustomerModal(customerId) {
+    const c = this.state.customers.find(item => item.id === customerId);
+    if (!c) {
+      alert('Không tìm thấy thông tin khách hàng!');
+      return;
+    }
+    document.getElementById('modal-customer-title').textContent = `✏️ Chỉnh Sửa Khách Hàng [${c.code || c.name}]`;
+    document.getElementById('btn-save-customer').textContent = '💾 Cập Nhật Khách Hàng';
+    document.getElementById('cust-id').value = c.id;
+    document.getElementById('cust-code').value = c.code || '';
+    document.getElementById('cust-group').value = c.customer_group || 'CORPORATE';
+    document.getElementById('cust-name').value = c.name || '';
+    document.getElementById('cust-phone').value = c.phone || '';
+    document.getElementById('cust-discount').value = c.default_discount || 0;
+    document.getElementById('cust-address').value = c.address || '';
+    document.getElementById('cust-default-show-cod').value = (c.default_show_cod === 0 || c.default_show_cod === '0') ? '0' : '1';
+    document.getElementById('cust-tax-company').value = c.tax_company || '';
+    document.getElementById('cust-tax-code').value = c.tax_code || '';
+    document.getElementById('cust-tax-email').value = c.tax_email || '';
     document.getElementById('modal-customer').classList.add('active');
   },
 
   async saveCustomer() {
+    const custId = document.getElementById('cust-id').value;
+    const isEdit = !!custId;
     const name = document.getElementById('cust-name').value.trim();
     if (!name) {
       alert('Vui lòng nhập tên khách hàng!');
@@ -3291,18 +3358,27 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const taxCompany = document.getElementById('cust-tax-company').value;
     const taxCode = document.getElementById('cust-tax-code').value;
     const taxEmail = document.getElementById('cust-tax-email').value;
+    const defaultShowCod = parseInt(document.getElementById('cust-default-show-cod')?.value) ?? 1;
 
     try {
-      await fetch('/api/customers', {
-        method: 'POST',
+      const url = isEdit ? `/api/customers/${custId}` : '/api/customers';
+      const method = isEdit ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name, code, customer_group: group, phone, default_discount: discount,
+          default_show_cod: defaultShowCod,
           address, tax_company: taxCompany, tax_code: taxCode, tax_email: taxEmail
         })
       });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Có lỗi xảy ra');
+      }
       this.closeModals();
-      this.loadCustomers();
+      await this.loadCustomers();
+      alert(isEdit ? '✅ Đã cập nhật thông tin khách hàng thành công!' : '✅ Đã thêm khách hàng mới thành công!');
     } catch (err) {
       alert('Lỗi lưu khách hàng: ' + err.message);
     }
@@ -3690,9 +3766,15 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 </span>
               </div>
             ` : ''}
-            <div style="font-size:11pt; font-weight:800; color:#b91c1c; margin-top:3px; white-space:nowrap;">
-              TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatNumber(order.remaining_amount) + ' đ' : '0 đ (Đã thanh toán đủ)'}
-            </div>
+            ${(order.show_cod_on_delivery === 0 || order.show_cod_on_delivery === false) ? `
+              <div style="font-size:10pt; font-weight:700; color:#15803d; margin-top:3px; white-space:nowrap; background:#dcfce7; padding:4px 8px; border-radius:4px; display:inline-block;">
+                ✓ KHÔNG THU HỘ (Giao theo hợp đồng / Đã thanh toán)
+              </div>
+            ` : `
+              <div style="font-size:11pt; font-weight:800; color:#b91c1c; margin-top:3px; white-space:nowrap;">
+                TIỀN THU HỘ (COD): ${order.remaining_amount > 0 ? this.formatNumber(order.remaining_amount) + ' đ' : '0 đ (Đã thanh toán đủ)'}
+              </div>
+            `}
           </div>
         </div>
 
