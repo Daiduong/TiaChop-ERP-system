@@ -212,6 +212,17 @@ router.put('/customers/:id', (req, res) => {
       req.params.id
     );
 
+    // Đồng bộ ngay lựa chọn COD cho tất cả các đơn hàng chưa hoàn tất hoặc đã tạo của khách hàng này
+    try {
+      db.prepare(`
+        UPDATE orders 
+        SET show_cod_on_delivery = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE customer_id = ?
+      `).run(showCod, req.params.id);
+    } catch (syncErr) {
+      console.warn('[Sync orders show_cod_on_delivery error]:', syncErr.message);
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -481,6 +492,7 @@ router.get('/orders', (req, res) => {
     const { status, type, customer_id, q, alert_filter } = req.query;
     let query = `
       SELECT o.*, c.name as customer_name, c.code as customer_code, c.phone as customer_phone,
+        c.default_show_cod,
         ct.name as contact_name, ct.phone as contact_phone
       FROM orders o
       JOIN customers c ON o.customer_id = c.id
@@ -889,6 +901,30 @@ router.patch('/orders/:id/status', (req, res) => {
     }
 
     res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật nhanh trạng thái ẩn/hiện COD của đơn hàng
+router.patch('/orders/:id/toggle-cod', (req, res) => {
+  try {
+    const { show_cod } = req.body;
+    const order = db.prepare('SELECT id, customer_id, show_cod_on_delivery FROM orders WHERE id = ?').get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    let newShowCod;
+    if (show_cod !== undefined && show_cod !== null) {
+      newShowCod = (show_cod === 1 || show_cod === true || show_cod === '1') ? 1 : 0;
+    } else {
+      // Đảo ngược
+      newShowCod = (order.show_cod_on_delivery === 0 || order.show_cod_on_delivery === false) ? 1 : 0;
+    }
+
+    db.prepare('UPDATE orders SET show_cod_on_delivery = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newShowCod, req.params.id);
+
+    res.json({ success: true, show_cod_on_delivery: newShowCod });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

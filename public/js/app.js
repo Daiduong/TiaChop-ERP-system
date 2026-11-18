@@ -2511,11 +2511,18 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       document.getElementById('delivery-form-notes').value = o.delivery_notes || '';
       const deliveryShowCod = document.getElementById('delivery-form-show-cod');
       if (deliveryShowCod) {
-        // Ưu tiên show_cod_on_delivery của đơn, nếu chưa có thì lấy theo default_show_cod của KH
-        if (o.show_cod_on_delivery !== undefined && o.show_cod_on_delivery !== null) {
-          deliveryShowCod.checked = !!o.show_cod_on_delivery;
-        } else if (o.default_show_cod !== undefined && o.default_show_cod !== null) {
-          deliveryShowCod.checked = !!o.default_show_cod;
+        // Kiểm tra xem khách hàng có mặc định ẩn COD không
+        let cust = null;
+        if (o.customer_id && this.state.customers) {
+          cust = this.state.customers.find(c => c.id === o.customer_id);
+        }
+        const custDefaultHide = (cust && (cust.default_show_cod === 0 || cust.default_show_cod === false || cust.default_show_cod === '0'))
+          || (o.default_show_cod === 0 || o.default_show_cod === false || o.default_show_cod === '0');
+
+        if (custDefaultHide) {
+          deliveryShowCod.checked = false;
+        } else if (o.show_cod_on_delivery !== undefined && o.show_cod_on_delivery !== null) {
+          deliveryShowCod.checked = (o.show_cod_on_delivery === 1 || o.show_cod_on_delivery === true || o.show_cod_on_delivery === '1');
         } else {
           deliveryShowCod.checked = true;
         }
@@ -3691,6 +3698,23 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       const shippingMethod = order.shipping_method || 'Giao hàng';
       const trackingCode = order.tracking_code ? ` - Vận đơn: <strong>${order.tracking_code}</strong>` : '';
 
+      // Xác định ẩn/hiện COD:
+      // 1. Kiểm tra thuộc tính của đơn hàng (show_cod_on_delivery)
+      // 2. Nếu đơn chưa cấu hình rõ hoặc = 1 mà khách hàng có default_show_cod = 0 thì tôn trọng cấu hình ẩn của khách hàng
+      let cust = null;
+      if (order.customer_id && this.state.customers) {
+        cust = this.state.customers.find(c => c.id === order.customer_id);
+      }
+      const customerHideCod = (cust && (cust.default_show_cod === 0 || cust.default_show_cod === false || cust.default_show_cod === '0'))
+        || (order.default_show_cod === 0 || order.default_show_cod === false || order.default_show_cod === '0');
+
+      const isCodHidden = (
+        order.show_cod_on_delivery === 0 ||
+        order.show_cod_on_delivery === false ||
+        order.show_cod_on_delivery === '0' ||
+        customerHideCod
+      );
+
       printable.innerHTML = `
         <div class="print-header" style="border-bottom-color:${C};">
           <div class="print-logo-box">
@@ -3766,7 +3790,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 </span>
               </div>
             ` : ''}
-            ${(order.show_cod_on_delivery === 0 || order.show_cod_on_delivery === false) ? `
+            ${isCodHidden ? `
               <div style="font-size:10pt; font-weight:700; color:#15803d; margin-top:3px; white-space:nowrap; background:#dcfce7; padding:4px 8px; border-radius:4px; display:inline-block;">
                 ✓ KHÔNG THU HỘ (Giao theo hợp đồng / Đã thanh toán)
               </div>
