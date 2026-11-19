@@ -1720,7 +1720,10 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               ` : ''}
               <button class="btn btn-secondary btn-sm" onclick="App.openDeliveryModal('${o.id}')" title="Cập nhật giao hàng & phí ship" style="color:var(--primary-light);">🚚 Giao Hàng</button>
               <button class="btn btn-secondary btn-sm" onclick="App.openPaymentModal('${o.id}', '${o.code}', '${safeCustomerName}', ${o.remaining_amount || 0})" title="Thu tiền cọc / thanh toán">💳 Thu Tiền</button>
-              <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Phiếu Báo Giá / Đơn Hàng PDF">🖨️ Phiếu Bán</button>
+              <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Xác Nhận Đơn Hàng / Phiếu Bán">🖨️ Phiếu Bán</button>
+              ${o.type === 'ORDER' ? `
+                <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}', true)" title="In lại Phiếu Báo Giá cho đơn hàng này để khách làm thanh toán" style="color:var(--primary-light);">📄 In Báo Giá</button>
+              ` : ''}
               <button class="btn btn-secondary btn-sm" onclick="App.printDeliveryNote('${o.id}')" title="In Phiếu Giao Hàng Cho Tài Xế / Khách">📦 Phiếu Giao</button>
               ${!isSales ? `<button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${o.id}')" title="In Phiếu Lệnh In Gửi Xưởng">🏭 Lệnh Xưởng</button>` : ''}
             </div>
@@ -1858,7 +1861,10 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
                 ` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="App.openDeliveryModal('${o.id}')" title="Cập nhật giao hàng & phí ship" style="color:var(--primary-light);">🚚 Giao</button>
                 <button class="btn btn-secondary btn-sm" onclick="App.openPaymentModal('${o.id}', '${o.code}', '${safeCustomerName}', ${o.remaining_amount || 0})" title="Thu cọc / Thanh toán">💳 Thu</button>
-                <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Báo Giá / Đơn Hàng PDF">🖨️ Phiếu Bán</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}')" title="In Xác Nhận Đơn Hàng / Phiếu Bán">🖨️ Phiếu Bán</button>
+                ${o.type === 'ORDER' ? `
+                  <button class="btn btn-secondary btn-sm" onclick="App.printQuote('${o.id}', true)" title="In lại Phiếu Báo Giá cho đơn hàng này để khách làm thủ tục thanh toán" style="color:var(--primary-light);">📄 Báo Giá</button>
+                ` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="App.printDeliveryNote('${o.id}')" title="In Phiếu Giao Hàng Cho Tài Xế / Khách">📦 Phiếu Giao</button>
                 ${!isSales ? `<button class="btn btn-secondary btn-sm" onclick="App.printJobTicket('${o.id}')" title="In Phiếu Lệnh In Gửi Xưởng">🏭 Lệnh Xưởng</button>` : ''}
               </div>
@@ -3463,14 +3469,31 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   // ==========================================
   // IN ẤN: BÁO GIÁ / ĐƠN HÀNG / PHIẾU GIAO / LỆNH XƯỞNG
   // ==========================================
-  async printQuote(orderId) {
-    const order = this.state.orders.find(o => o.id === orderId);
+  // IN ẤN (PHIẾU BÁN / BÁO GIÁ / LỆNH XƯỞNG / PHIẾU GIAO)
+  // forceQuoteTitle: true nếu muốn ép tiêu đề là "PHIẾU BÁO GIÁ" kể cả khi đã là Đơn Hàng (đã chốt)
+  async printQuote(orderId, forceQuoteTitle = false) {
+    let order = this.state.orders.find(o => o.id === orderId);
+    if (!order || !order.items || order.items.length === 0) {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`);
+        order = await res.json();
+      } catch (e) {
+        console.error('Lỗi tải chi tiết đơn để in:', e);
+      }
+    }
     if (!order) return;
 
+    const isQuoteMode = forceQuoteTitle || order.type === 'QUOTE';
     const S = await this.getPrintSettings();
     const C = S.primary_color || '#0284c7';
     const lines = t => (t || '').split('\n').filter(Boolean).map(l => `<div>• ${l}</div>`).join('');
     const printable = document.getElementById('printable-area');
+
+    // Thời gian giao hàng: Nếu có hạn cụ thể thì hiển thị ngày kèm (hoặc ưu tiên dạng 5-7 ngày làm việc kể từ ngày chốt đơn khi báo giá)
+    const deliveryDeadlineText = isQuoteMode 
+      ? '5 - 7 ngày làm việc kể từ ngày chốt đơn & duyệt file'
+      : (order.delivery_deadline ? `${new Date(order.delivery_deadline).toLocaleDateString('vi-VN')} (5-7 ngày làm việc)` : '5 - 7 ngày làm việc');
+
     printable.innerHTML = `
       <div class="print-header" style="border-bottom-color:${C};">
         <div class="print-logo-box">
@@ -3484,11 +3507,11 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         </div>
         <div class="print-company-info">
           <div style="font-size:13pt; font-weight:800; color:${C}; text-transform:uppercase; margin-bottom:2px;">
-            ${order.type === 'QUOTE' ? 'PHIẾU BÁO GIÁ' : 'XÁC NHẬN ĐƠN HÀNG'}
+            ${isQuoteMode ? 'PHIẾU BÁO GIÁ' : 'XÁC NHẬN ĐƠN HÀNG'}
           </div>
           <div>Mã Phiếu: <strong>${order.code}</strong></div>
           <div>Ngày Lập: <strong>${new Date(order.created_at).toLocaleDateString('vi-VN')}</strong></div>
-          ${order.delivery_deadline ? `<div>Hạn Giao: <strong>${new Date(order.delivery_deadline).toLocaleDateString('vi-VN')}</strong></div>` : ''}
+          <div>Thời Gian Giao: <strong>${deliveryDeadlineText}</strong></div>
         </div>
       </div>
 
@@ -3569,7 +3592,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
       <div class="print-terms">
         <div style="font-weight:700; color:#0f172a; margin-bottom:3px;">Điều khoản thanh toán &amp; Giao nhận:</div>
-        ${lines(order.type === 'QUOTE' ? S.quote_terms : S.order_terms)}
+        ${lines(isQuoteMode ? (S.quote_terms || S.order_terms) : (S.order_terms || S.quote_terms))}
         <div style="margin-top:2px;">• Thông tin tài khoản: <strong>${S.bank_name || 'Vietcombank'} ${S.bank_account || '0721000556346'} - ${S.bank_holder || 'CÔNG TY TNHH TM DV IN TIA CHỚP'}</strong>.</div>
       </div>
 
