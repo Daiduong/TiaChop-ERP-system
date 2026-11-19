@@ -3511,7 +3511,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
           </div>
           <div>Mã Phiếu: <strong>${order.code}</strong></div>
           <div>Ngày Lập: <strong>${new Date(order.created_at).toLocaleDateString('vi-VN')}</strong></div>
-          <div>Thời Gian Giao: <strong>${deliveryDeadlineText}</strong></div>
+          ${!isQuoteMode && order.delivery_deadline ? `<div>Hạn Giao: <strong>${new Date(order.delivery_deadline).toLocaleDateString('vi-VN')}</strong></div>` : ''}
         </div>
       </div>
 
@@ -3592,6 +3592,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
 
       <div class="print-terms">
         <div style="font-weight:700; color:#0f172a; margin-bottom:3px;">Điều khoản thanh toán &amp; Giao nhận:</div>
+        <div>• <strong>Thời gian giao hàng:</strong> 5 - 7 ngày làm việc kể từ ngày chốt đơn &amp; duyệt file.</div>
         ${lines(isQuoteMode ? (S.quote_terms || S.order_terms) : (S.order_terms || S.quote_terms))}
         <div style="margin-top:2px;">• Thông tin tài khoản: <strong>${S.bank_name || 'Vietcombank'} ${S.bank_account || '0721000556346'} - ${S.bank_holder || 'CÔNG TY TNHH TM DV IN TIA CHỚP'}</strong>.</div>
       </div>
