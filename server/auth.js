@@ -78,6 +78,11 @@ router.post('/logout', (req, res) => {
 
 // ===== Middleware xác thực =====
 function requireAuth(req, res, next) {
+  // Bỏ qua kiểm tra đăng nhập đối với webhook của Facebook / Zalo CSKH
+  if (req.originalUrl && (req.originalUrl.startsWith('/api/cskh/webhook') || req.originalUrl.startsWith('/api/webhook'))) {
+    return next();
+  }
+
   const token = getCookie(req, COOKIE);
   if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
   const row = db.prepare(`
