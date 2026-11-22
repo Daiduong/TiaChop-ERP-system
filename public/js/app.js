@@ -33,8 +33,8 @@ const App = {
 
   // Menu (tab) được phép truy cập theo vai trò
   ROLE_TABS: {
-    ADMIN: ['dashboard', 'pricing', 'orders', 'suppliers', 'customers', 'finance', 'management', 'admin'],
-    SALES: ['dashboard', 'pricing', 'orders', 'customers'],
+    ADMIN: ['dashboard', 'pricing', 'orders', 'suppliers', 'customers', 'cskh', 'finance', 'management', 'admin'],
+    SALES: ['dashboard', 'pricing', 'orders', 'customers', 'cskh'],
     ACCOUNTANT: ['dashboard', 'orders', 'customers', 'finance', 'management'],
     COORDINATOR: ['dashboard', 'orders', 'suppliers']
   },
@@ -231,6 +231,7 @@ const App = {
       orders: 'Quản Lý Báo Giá & Đơn Hàng',
       suppliers: 'Xưởng In Gia Công & SRM',
       customers: 'Quản Lý Khách Hàng (CRM)',
+      cskh: 'Chăm Sóc Khách Hàng Đa Kênh & Trợ Lý AI',
       finance: 'Dòng Tiền, Sổ Công Nợ & Thuế',
       management: 'Báo Cáo Quản Trị & Chỉ Số Điều Hành (BI Analytics)',
       admin: 'Quản Trị Hệ Thống'
@@ -260,6 +261,7 @@ const App = {
     if (tabId === 'pricing') this.triggerPricingCalculation();
     if (tabId === 'suppliers') this.loadSuppliers();
     if (tabId === 'customers') this.loadCustomers();
+    if (tabId === 'cskh') this.loadCSKHConversations();
     if (tabId === 'finance') { this.loadFinance(); if (window.Reports) Reports.init(); }
     if (tabId === 'management' && window.Management) Management.init();
     if (tabId === 'admin' && window.Admin) Admin.load();
@@ -3970,6 +3972,370 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
   formatNumber(amount) {
     if (isNaN(amount) || amount === null || amount === undefined) return '0';
     return new Intl.NumberFormat('vi-VN').format(Math.round(amount));
+  },
+
+  // ==========================================
+  // MODULE CSKH ĐA KÊNH & AI TRỢ LÝ
+  // ==========================================
+  stateCSKH: {
+    conversations: [],
+    currentConvId: null,
+    currentConv: null,
+    currentMessages: [],
+    filterPlatform: 'ALL',
+    searchQuery: '',
+    latestAiExtracted: null
+  },
+
+  async loadCSKHConversations() {
+    try {
+      const { filterPlatform, searchQuery } = this.stateCSKH;
+      let url = `/api/cskh/conversations?platform=${filterPlatform}`;
+      if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      this.stateCSKH.conversations = data || [];
+      this.renderCSKHConversations();
+
+      // Cập nhật badge chưa đọc
+      const totalUnread = this.stateCSKH.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      const badgeEl = document.getElementById('badge-cskh-count');
+      if (badgeEl) {
+        if (totalUnread > 0) {
+          badgeEl.textContent = totalUnread;
+          badgeEl.style.display = 'inline-block';
+        } else {
+          badgeEl.style.display = 'none';
+        }
+      }
+
+      // Tự động mở hội thoại đầu tiên nếu chưa chọn hội thoại nào
+      if (!this.stateCSKH.currentConvId && this.stateCSKH.conversations.length > 0) {
+        this.selectCSKHConversation(this.stateCSKH.conversations[0].id);
+      }
+    } catch (err) {
+      console.error('Lỗi loadCSKHConversations:', err);
+    }
+  },
+
+  renderCSKHConversations() {
+    const listEl = document.getElementById('cskh-conv-list');
+    const countEl = document.getElementById('cskh-conv-count');
+    if (!listEl) return;
+
+    if (countEl) countEl.textContent = this.stateCSKH.conversations.length;
+
+    if (this.stateCSKH.conversations.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:30px 10px; color:var(--text-muted); font-size:12px;">
+          Chưa có cuộc hội thoại nào.<br>
+          Bấm <strong>"+ Test"</strong> để tạo thử tin nhắn khách hàng.
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = this.stateCSKH.conversations.map(c => {
+      const isSelected = c.id === this.stateCSKH.currentConvId;
+      const platformIcon = c.platform === 'FACEBOOK' ? '🔵' : (c.platform === 'ZALO' ? '💬' : '🌐');
+      const timeStr = c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+      const initial = (c.sender_name || 'K').charAt(0).toUpperCase();
+
+      return `
+        <div onclick="App.selectCSKHConversation('${c.id}')" 
+          style="padding:10px; border-radius:8px; cursor:pointer; display:flex; gap:10px; align-items:center; transition:background 0.2s;
+                 background:${isSelected ? 'rgba(2, 132, 199, 0.12)' : 'var(--bg-card-secondary)'};
+                 border: 1px solid ${isSelected ? 'var(--primary)' : 'transparent'};">
+          <div style="width:36px; height:36px; border-radius:50%; background:#0284c7; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">
+            ${initial}
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:700; font-size:13px; color:var(--text-primary); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+                ${platformIcon} ${c.sender_name || 'Khách Vãng Lai'}
+              </span>
+              <span style="font-size:11px; color:var(--text-muted); flex-shrink:0;">${timeStr}</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-secondary); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; margin-top:2px;">
+              ${c.last_message || 'Chưa có tin nhắn'}
+            </div>
+          </div>
+          ${c.unread_count > 0 ? `
+            <span style="background:var(--accent-rose); color:#fff; font-size:10px; font-weight:700; border-radius:10px; padding:2px 6px;">
+              ${c.unread_count}
+            </span>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  },
+
+  async selectCSKHConversation(convId) {
+    this.stateCSKH.currentConvId = convId;
+    const conv = this.stateCSKH.conversations.find(c => c.id === convId);
+    this.stateCSKH.currentConv = conv;
+
+    this.renderCSKHConversations();
+
+    // Cập nhật header chat
+    if (conv) {
+      document.getElementById('cskh-current-name').textContent = conv.sender_name || 'Khách Hàng';
+      document.getElementById('cskh-current-avatar').textContent = (conv.sender_name || 'K').charAt(0).toUpperCase();
+      document.getElementById('cskh-current-platform').textContent = `Kênh: ${conv.platform} • ID: ${conv.sender_id || ''}`;
+      document.getElementById('cskh-chat-actions').style.display = 'flex';
+      document.getElementById('cskh-reply-box').style.display = 'block';
+
+      // Cập nhật thông tin khách ERP
+      const profileEl = document.getElementById('cskh-customer-profile');
+      if (conv.customer_id) {
+        profileEl.innerHTML = `
+          <strong>${conv.customer_name || 'Đã liên kết'}</strong> (Mã: ${conv.customer_code || ''})<br>
+          SĐT: ${conv.sender_phone || 'Chưa lưu'}<br>
+          Trạng thái: <span style="color:#16a34a; font-weight:600;">Khách hàng thân thiết</span>
+        `;
+      } else {
+        profileEl.innerHTML = `
+          Khách vãng lai từ ${conv.platform}.<br>
+          ${conv.sender_phone ? `SĐT: <strong>${conv.sender_phone}</strong><br>` : ''}
+          <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="App.openNewCustomerModal({ name: '${conv.sender_name || ''}', phone: '${conv.sender_phone || ''}' })">
+            + Lưu vào Danh Bạ Khách Hàng
+          </button>
+        `;
+      }
+    }
+
+    // Tải tin nhắn
+    try {
+      const res = await fetch(`/api/cskh/conversations/${convId}/messages`);
+      const messages = await res.json();
+      this.stateCSKH.currentMessages = messages || [];
+      this.renderCSKHMessages();
+
+      // Tự động phân tích AI từ tin nhắn mới nhất
+      this.aiAnalyzeCurrentChat(false);
+    } catch (err) {
+      console.error('Lỗi tải tin nhắn cuộc hội thoại:', err);
+    }
+  },
+
+  renderCSKHMessages() {
+    const boxEl = document.getElementById('cskh-messages-box');
+    if (!boxEl) return;
+
+    if (this.stateCSKH.currentMessages.length === 0) {
+      boxEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); padding-top:30px; font-size:12px;">Chưa có tin nhắn trong cuộc hội thoại này.</div>`;
+      return;
+    }
+
+    boxEl.innerHTML = this.stateCSKH.currentMessages.map(m => {
+      const isAgent = m.sender_type === 'AGENT';
+      const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+      return `
+        <div style="display:flex; justify-content:${isAgent ? 'flex-end' : 'flex-start'}; align-items:flex-end; gap:8px;">
+          ${!isAgent ? `
+            <div style="width:28px; height:28px; border-radius:50%; background:#0284c7; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0;">
+              ${(m.sender_name || 'K').charAt(0).toUpperCase()}
+            </div>
+          ` : ''}
+          <div style="max-width:70%;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:2px; ${isAgent ? 'text-align:right;' : ''}">
+              ${m.sender_name || (isAgent ? 'Nhân viên CSKH' : 'Khách')} • ${timeStr}
+            </div>
+            <div style="padding:10px 14px; border-radius:${isAgent ? '14px 14px 2px 14px' : '14px 14px 14px 2px'}; font-size:13px; line-height:1.45; word-break:break-word;
+                        background:${isAgent ? 'var(--primary)' : 'var(--bg-card-secondary)'};
+                        color:${isAgent ? '#ffffff' : 'var(--text-primary)'};
+                        border: 1px solid ${isAgent ? 'transparent' : 'var(--border-subtle)'};">
+              ${m.message_text}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Cuộn xuống tin nhắn mới nhất
+    boxEl.scrollTop = boxEl.scrollHeight;
+  },
+
+  async sendCSKHReply() {
+    const inputEl = document.getElementById('cskh-reply-input');
+    if (!inputEl || !this.stateCSKH.currentConvId) return;
+
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    inputEl.value = '';
+    try {
+      const res = await fetch(`/api/cskh/conversations/${this.stateCSKH.currentConvId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_text: text })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Tải lại danh sách tin nhắn và danh sách hội thoại
+        const msgRes = await fetch(`/api/cskh/conversations/${this.stateCSKH.currentConvId}/messages`);
+        this.stateCSKH.currentMessages = await msgRes.json();
+        this.renderCSKHMessages();
+        this.loadCSKHConversations();
+      } else {
+        alert('Lỗi gửi tin: ' + (data.error || 'Vui lòng thử lại'));
+      }
+    } catch (err) {
+      alert('Lỗi kết nối khi gửi tin: ' + err.message);
+    }
+  },
+
+  async aiAnalyzeCurrentChat(showAlert = true) {
+    if (!this.stateCSKH.currentConvId) return;
+
+    const analysisEl = document.getElementById('cskh-ai-analysis-text');
+    const btnCreateOrder = document.getElementById('btn-quick-create-order');
+    if (analysisEl) analysisEl.textContent = '⏳ AI đang bóc tách quy cách in, số lượng và kích thước...';
+
+    try {
+      const res = await fetch(`/api/cskh/conversations/${this.stateCSKH.currentConvId}/ai-analyze`, { method: 'POST' });
+      const { data } = await res.json();
+      this.stateCSKH.latestAiExtracted = data;
+
+      if (data && data.detected) {
+        if (analysisEl) {
+          analysisEl.innerHTML = `
+            <strong>Sản phẩm:</strong> ${data.product_name}<br>
+            <strong>Số lượng:</strong> ${this.formatNumber(data.quantity)} ${data.unit}<br>
+            <strong>Quy cách bóc tách:</strong> ${data.specs || 'Chuẩn theo yêu cầu'}<br>
+            ${data.customer_phone ? `<strong>SĐT nhận diện:</strong> ${data.customer_phone}<br>` : ''}
+            <span style="color:#16a34a; font-weight:700;">✓ Đã sẵn sàng chuyển sang tạo đơn hàng!</span>
+          `;
+        }
+        if (btnCreateOrder) btnCreateOrder.style.display = 'block';
+        if (showAlert) alert('AI đã bóc tách xong thông tin ấn phẩm! Bạn có thể bấm "Chuyển Sang Tạo Đơn Hàng Ngay".');
+      } else {
+        if (analysisEl) {
+          analysisEl.innerHTML = `Không phát hiện yêu cầu in ấn cụ thể trong đoạn chat này.<br>Khách có thể đang hỏi thông tin khác.`;
+        }
+        if (btnCreateOrder) btnCreateOrder.style.display = 'none';
+      }
+    } catch (err) {
+      if (analysisEl) analysisEl.textContent = 'Lỗi khi AI phân tích: ' + err.message;
+    }
+  },
+
+  createOrderFromCSKH() {
+    const data = this.stateCSKH.latestAiExtracted;
+    const conv = this.stateCSKH.currentConv;
+    if (!data) return;
+
+    // Chuyển sang Tab Báo Giá & Đơn Hàng và mở modal Tạo Đơn Hàng với dữ liệu điền sẵn
+    this.switchTab('orders');
+    this.openNewOrderModal();
+
+    // Điền sẵn sản phẩm bóc tách được
+    setTimeout(() => {
+      const itemNameInput = document.querySelector('.item-name-input');
+      const itemSpecsInput = document.querySelector('.item-specs-input');
+      const itemQtyInput = document.querySelector('.item-qty-input');
+      const itemUnitInput = document.querySelector('.item-unit-input');
+
+      if (itemNameInput) itemNameInput.value = data.product_name || 'Ấn phẩm in';
+      if (itemSpecsInput) itemSpecsInput.value = data.specs || '';
+      if (itemQtyInput) itemQtyInput.value = data.quantity || 1000;
+      if (itemUnitInput) itemUnitInput.value = data.unit || 'con';
+
+      // Điền người liên hệ nếu có
+      if (conv) {
+        const contactInput = document.getElementById('qct-name');
+        if (contactInput) contactInput.value = conv.sender_name || '';
+        const phoneInput = document.getElementById('qct-phone');
+        if (phoneInput && (data.customer_phone || conv.sender_phone)) {
+          phoneInput.value = data.customer_phone || conv.sender_phone;
+        }
+      }
+
+      this.calcOrderTotals();
+    }, 200);
+  },
+
+  setCSKHFilter(platform, btn) {
+    this.stateCSKH.filterPlatform = platform;
+    document.querySelectorAll('.cskh-filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    this.loadCSKHConversations();
+  },
+
+  filterCSKHConversations() {
+    const query = document.getElementById('cskh-search-input')?.value.trim() || '';
+    this.stateCSKH.searchQuery = query;
+    this.loadCSKHConversations();
+  },
+
+  async simulateTestChat() {
+    const prompts = [
+      'Shop ơi báo giá giúp mình in 2.000 con tem decal giấy 6x6cm cán màng bóng bế demi, sđt mình 0909123456',
+      'Mình cần in 5 hộp namecard giấy C300 cán màng mờ 2 mặt cho công ty, giao trong 2 ngày được không shop?',
+      'Bên bạn có in tờ rơi A5 giấy C150 in màu 2 mặt không? Mình cần 1.000 tờ báo giá giúp mình với'
+    ];
+    const randomMsg = prompts[Math.floor(Math.random() * prompts.length)];
+
+    try {
+      const res = await fetch('/api/cskh/conversations/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: 'FACEBOOK',
+          sender_name: 'Khách Hàng Facebook (Test)',
+          message_text: randomMsg
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await this.loadCSKHConversations();
+        this.selectCSKHConversation(data.conversation_id);
+      }
+    } catch (err) {
+      alert('Lỗi tạo hội thoại thử nghiệm: ' + err.message);
+    }
+  },
+
+  async openCSKHSettingsModal() {
+    try {
+      const res = await fetch('/api/cskh/channels');
+      const channels = await res.json();
+      const fb = channels.find(c => c.platform === 'FACEBOOK');
+      if (fb) {
+        document.getElementById('cskh-conf-name').value = fb.name || '';
+        document.getElementById('cskh-conf-page-id').value = fb.page_id || '';
+        document.getElementById('cskh-conf-verify-token').value = fb.verify_token || 'tiachop_cskh_verify_token_2026';
+      }
+      document.getElementById('modal-cskh-settings').classList.add('active');
+    } catch (err) {
+      alert('Lỗi mở cấu hình kênh: ' + err.message);
+    }
+  },
+
+  async saveCSKHSettings() {
+    const name = document.getElementById('cskh-conf-name').value.trim();
+    const page_id = document.getElementById('cskh-conf-page-id').value.trim();
+    const access_token = document.getElementById('cskh-conf-access-token').value.trim();
+    const verify_token = document.getElementById('cskh-conf-verify-token').value.trim();
+
+    try {
+      const res = await fetch('/api/cskh/channels/channel_fb_main', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, page_id, access_token, verify_token, status: 'ACTIVE' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Đã lưu cấu hình kết nối Fanpage Facebook thành công!');
+        this.closeModals();
+      } else {
+        alert('Lỗi: ' + data.error);
+      }
+    } catch (err) {
+      alert('Lỗi lưu cấu hình: ' + err.message);
+    }
   }
 };
 

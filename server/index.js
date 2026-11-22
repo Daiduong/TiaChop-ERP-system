@@ -21,8 +21,13 @@ const adminRoutes = require('./admin'); // tạo bảng users trước
 const auth = require('./auth');
 const backupRoutes = require('./backup');
 const excelRoutes = require('./excel');
+const cskhRoutes = require('./cskh');
+
+// Webhook tiếp nhận sự kiện từ Facebook/Zalo không yêu cầu session login từ header người dùng
+app.use('/api/cskh/webhook', cskhRoutes);
 
 app.use('/api/auth', auth.router);
+app.use('/api/cskh', auth.requireAuth, cskhRoutes);
 app.use('/api/admin', auth.requireAuth, auth.requireRole('ADMIN'), adminRoutes);
 app.use('/api/admin/backup', auth.requireAuth, auth.requireRole('ADMIN'), backupRoutes);
 app.use('/api/excel', auth.requireAuth, excelRoutes);
