@@ -64,7 +64,8 @@ router.post('/login', (req, res) => {
   const expires = Date.now() + SESSION_DAYS * 86400000;
   db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, u.id, expires);
 
-  res.setHeader('Set-Cookie', `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}`);
+  const secure = (req.secure || req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}${secure}`);
   res.json({ success: true, user: publicUser(u) });
 });
 
@@ -78,11 +79,6 @@ router.post('/logout', (req, res) => {
 
 // ===== Middleware xác thực =====
 function requireAuth(req, res, next) {
-  // Bỏ qua kiểm tra đăng nhập đối với webhook của Facebook / Zalo CSKH
-  if (req.originalUrl && (req.originalUrl.startsWith('/api/cskh/webhook') || req.originalUrl.startsWith('/api/webhook'))) {
-    return next();
-  }
-
   const token = getCookie(req, COOKIE);
   if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
   const row = db.prepare(`

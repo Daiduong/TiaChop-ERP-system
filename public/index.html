@@ -948,7 +948,10 @@
                   <span>💬 Hội Thoại</span>
                   <span class="badge" id="cskh-conv-count" style="font-size:11px; background:var(--bg-card-secondary);">0</span>
                 </h3>
-                <div style="display: flex; gap: 6px;">
+                <div style="display: flex; gap: 6px; align-items:center;">
+                  <span id="cskh-channel-status-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: #dcfce7; color: #166534;" title="Trạng thái kết nối">
+                    🟢 Đã lưu Fanpage
+                  </span>
                   <button class="btn btn-secondary btn-sm" onclick="App.openCSKHSettingsModal()" title="Cấu hình kết nối Facebook & Zalo">⚙️ Kênh</button>
                   <button class="btn btn-secondary btn-sm" onclick="App.simulateTestChat()" title="Tạo tin nhắn khách hàng mẫu để thử nghiệm">+ Test</button>
                 </div>
@@ -2604,10 +2607,16 @@
           <label class="form-label">Verify Token (Mã xác minh Webhook)</label>
           <input type="text" class="form-control" id="cskh-conf-verify-token" value="tiachop_cskh_verify_token_2026">
         </div>
+        <div class="form-group">
+          <label class="form-label">App Secret (khuyến nghị — để xác thực tin nhắn thật từ Meta)</label>
+          <input type="password" class="form-control" id="cskh-conf-app-secret" autocomplete="off" placeholder="App Secret (Settings → Basic)">
+        </div>
+        <div id="cskh-check-result" style="margin-top:8px;"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
-        <button class="btn btn-primary" onclick="App.saveCSKHSettings()">💾 Lưu Cấu Hình</button>
+        <button class="btn btn-secondary" onclick="App.closeModals()">Đóng</button>
+        <button class="btn btn-secondary" onclick="App.checkCSKHConnection()">🔍 Kiểm Tra Kết Nối</button>
+        <button class="btn btn-primary" onclick="App.saveCSKHSettings()">💾 Lưu &amp; Kết Nối</button>
       </div>
     </div>
   </div>
@@ -2616,7 +2625,7 @@
     // Cache-buster: tải lại JS với version mới khi có thay đổi
     (function() {
       var v = Date.now();
-      var scripts = ['/js/app.js', '/js/admin.js', '/js/reports.js', '/js/management.js', '/js/auth.js'];
+      var scripts = ['/js/app.js', '/js/cskh.js', '/js/admin.js', '/js/reports.js', '/js/management.js', '/js/auth.js'];
       scripts.forEach(function(src) {
         var s = document.createElement('script');
         s.src = src + '?v=' + v;

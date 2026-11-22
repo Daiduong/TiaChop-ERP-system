@@ -9,10 +9,22 @@ function generateId(prefix = 'id') {
 }
 
 function generateOrderCode(type = 'ORDER') {
-  const timestamp = Date.now().toString().slice(-8);
-  const randomPart = Math.floor(100 + Math.random() * 900);
-  return type === 'QUOTE' ? `BG_${timestamp}` : `DH_${timestamp}`;
+  const prefix = type === 'QUOTE' ? 'BG' : 'DH';
+  // 8 số cuối timestamp lặp lại sau ~27 giờ → luôn kiểm tra trùng và thử lại
+  for (let i = 0; i < 20; i++) {
+    const stamp = Date.now().toString().slice(-8);
+    const code = i === 0 ? `${prefix}_${stamp}` : `${prefix}_${stamp}${Math.floor(Math.random() * 90 + 10)}`;
+    if (!db.prepare('SELECT 1 FROM orders WHERE code = ?').get(code)) return code;
+  }
+  return `${prefix}_${Date.now()}`;
 }
+
+// Chỉ Admin/Điều phối được thao tác lệnh xưởng & tạo xưởng (Sales/Kế toán chỉ xem)
+router.use(['/suppliers/jobs', '/suppliers'], (req, res, next) => {
+  if (req.method === 'GET') return next();
+  if (['ADMIN', 'COORDINATOR'].includes(req.user?.role)) return next();
+  res.status(403).json({ error: 'Bạn không có quyền thao tác lệnh xưởng' });
+});
 
 // ==========================================
 // PHÂN QUYỀN DỮ LIỆU: SALES chỉ thấy dữ liệu do chính mình tạo
@@ -212,13 +224,15 @@ router.put('/customers/:id', (req, res) => {
       req.params.id
     );
 
-    // Đồng bộ ngay lựa chọn COD cho tất cả các đơn hàng chưa hoàn tất hoặc đã tạo của khách hàng này
+    // Đồng bộ lựa chọn COD cho các đơn CHƯA hoàn tất của khách (đơn đã xong giữ nguyên lịch sử)
     try {
-      db.prepare(`
-        UPDATE orders 
-        SET show_cod_on_delivery = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE customer_id = ?
-      `).run(showCod, req.params.id);
+      if (default_show_cod !== undefined && default_show_cod !== null) {
+        db.prepare(`
+          UPDATE orders
+          SET show_cod_on_delivery = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE customer_id = ? AND status NOT IN ('COMPLETED', 'CANCELLED')
+        `).run(showCod, req.params.id);
+      }
     } catch (syncErr) {
       console.warn('[Sync orders show_cod_on_delivery error]:', syncErr.message);
     }
