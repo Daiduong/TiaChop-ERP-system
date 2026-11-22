@@ -103,43 +103,68 @@ router.get('/webhook/facebook', (req, res) => {
 router.post('/webhook/facebook', async (req, res) => {
   try {
     const body = req.body;
+    console.log('[Facebook Webhook POST Payload]:', JSON.stringify(body));
+
     if (body.object === 'page') {
       for (const entry of body.entry) {
         const pageId = entry.id;
-        const webhookEvent = entry.messaging ? entry.messaging[0] : null;
-        if (!webhookEvent) continue;
+        const messagingList = entry.messaging || [];
+        for (const webhookEvent of messagingList) {
+          if (!webhookEvent) continue;
 
-        const senderPsid = webhookEvent.sender.id;
-        // Bỏ qua tin nhắn do chính page gửi đi
-        if (webhookEvent.message && !webhookEvent.message.is_echo) {
-          const messageText = webhookEvent.message.text || '';
-          const attachments = webhookEvent.message.attachments ? JSON.stringify(webhookEvent.message.attachments) : '[]';
+          const senderPsid = webhookEvent.sender ? webhookEvent.sender.id : null;
+          if (!senderPsid) continue;
 
-          // Lưu hoặc cập nhật cuộc hội thoại
-          let conv = db.prepare("SELECT * FROM chat_conversations WHERE sender_id = ? AND platform = 'FACEBOOK'").get(senderPsid);
-          if (!conv) {
-            const convId = generateId('conv');
+          // Bỏ qua tin nhắn do chính page gửi đi (echo)
+          if (webhookEvent.message && !webhookEvent.message.is_echo) {
+            const messageText = webhookEvent.message.text || '';
+            const attachments = webhookEvent.message.attachments ? JSON.stringify(webhookEvent.message.attachments) : '[]';
+
+            console.log(`[Facebook Webhook] Nhận tin nhắn từ ${senderPsid}: "${messageText}"`);
+
+            // Lấy tên người gửi từ Facebook Graph API nếu có access token
+            let senderName = `Khách Facebook (${senderPsid.substr(-4)})`;
+            let senderAvatar = '';
+            try {
+              const channel = db.prepare("SELECT access_token FROM chat_channels WHERE platform = 'FACEBOOK'").get();
+              if (channel && channel.access_token) {
+                const fbProfile = await fetch(`https://graph.facebook.com/${senderPsid}?fields=first_name,last_name,profile_pic&access_token=${channel.access_token}`).then(r => r.json());
+                if (fbProfile && (fbProfile.first_name || fbProfile.last_name)) {
+                  senderName = `${fbProfile.last_name || ''} ${fbProfile.first_name || ''}`.trim();
+                  senderAvatar = fbProfile.profile_pic || '';
+                }
+              }
+            } catch (pErr) {
+              // Bỏ qua nếu lỗi gọi profile
+            }
+
+            // Lưu hoặc cập nhật cuộc hội thoại
+            let conv = db.prepare("SELECT * FROM chat_conversations WHERE sender_id = ? AND platform = 'FACEBOOK'").get(senderPsid);
+            if (!conv) {
+              const convId = generateId('conv');
+              db.prepare(`
+                INSERT INTO chat_conversations (id, channel_id, platform, sender_id, sender_name, sender_avatar, last_message, last_message_at, unread_count)
+                VALUES (?, 'channel_fb_main', 'FACEBOOK', ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+              `).run(convId, senderPsid, senderName, senderAvatar, messageText || '[Đính kèm]');
+              conv = { id: convId };
+            } else {
+              db.prepare(`
+                UPDATE chat_conversations 
+                SET last_message = ?, last_message_at = CURRENT_TIMESTAMP, unread_count = unread_count + 1, status = 'OPEN',
+                    sender_name = COALESCE(NULLIF(?, ''), sender_name)
+                WHERE id = ?
+              `).run(messageText || '[Đính kèm]', senderName, conv.id);
+            }
+
+            // Lưu tin nhắn vào lịch sử
+            const msgId = generateId('msg');
+            const suggestedData = analyzeMessageForPrintingOrder(messageText);
+
             db.prepare(`
-              INSERT INTO chat_conversations (id, channel_id, platform, sender_id, sender_name, last_message, last_message_at, unread_count)
-              VALUES (?, 'channel_fb_main', 'FACEBOOK', ?, ?, ?, CURRENT_TIMESTAMP, 1)
-            `).run(convId, senderPsid, `Khách Facebook (${senderPsid.substr(-4)})`, messageText || '[Đính kèm]');
-            conv = { id: convId };
-          } else {
-            db.prepare(`
-              UPDATE chat_conversations 
-              SET last_message = ?, last_message_at = CURRENT_TIMESTAMP, unread_count = unread_count + 1, status = 'OPEN'
-              WHERE id = ?
-            `).run(messageText || '[Đính kèm]', conv.id);
+              INSERT INTO chat_messages (id, conversation_id, sender_type, sender_name, message_text, attachments, suggested_order_data)
+              VALUES (?, ?, 'CUSTOMER', ?, ?, ?, ?)
+            `).run(msgId, conv.id, senderName, messageText, attachments, suggestedData ? JSON.stringify(suggestedData) : null);
           }
-
-          // Lưu tin nhắn vào lịch sử
-          const msgId = generateId('msg');
-          const suggestedData = analyzeMessageForPrintingOrder(messageText);
-
-          db.prepare(`
-            INSERT INTO chat_messages (id, conversation_id, sender_type, sender_name, message_text, attachments, suggested_order_data)
-            VALUES (?, ?, 'CUSTOMER', 'Khách Facebook', ?, ?, ?)
-          `).run(msgId, conv.id, messageText, attachments, suggestedData ? JSON.stringify(suggestedData) : null);
         }
       }
       return res.status(200).send('EVENT_RECEIVED');

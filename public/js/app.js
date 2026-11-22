@@ -3987,7 +3987,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     latestAiExtracted: null
   },
 
-  async loadCSKHConversations() {
+  async loadCSKHConversations(isBackground = false) {
     try {
       const { filterPlatform, searchQuery } = this.stateCSKH;
       let url = `/api/cskh/conversations?platform=${filterPlatform}`;
@@ -4010,12 +4010,38 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         }
       }
 
-      // Tự động mở hội thoại đầu tiên nếu chưa chọn hội thoại nào
-      if (!this.stateCSKH.currentConvId && this.stateCSKH.conversations.length > 0) {
+      // Tự động mở hội thoại đầu tiên nếu chưa chọn hội thoại nào và không phải poll ngầm
+      if (!this.stateCSKH.currentConvId && this.stateCSKH.conversations.length > 0 && !isBackground) {
         this.selectCSKHConversation(this.stateCSKH.conversations[0].id);
+      }
+
+      // Khởi chạy timer tự động kiểm tra tin nhắn mới mỗi 3 giây nếu đang ở tab cskh
+      if (!this.stateCSKH.pollingTimer) {
+        this.stateCSKH.pollingTimer = setInterval(() => {
+          if (this.state.activeTab === 'cskh') {
+            this.loadCSKHConversations(true);
+            if (this.stateCSKH.currentConvId) {
+              this.refreshCurrentCSKHMessages();
+            }
+          }
+        }, 3000);
       }
     } catch (err) {
       console.error('Lỗi loadCSKHConversations:', err);
+    }
+  },
+
+  async refreshCurrentCSKHMessages() {
+    if (!this.stateCSKH.currentConvId) return;
+    try {
+      const res = await fetch(`/api/cskh/conversations/${this.stateCSKH.currentConvId}/messages`);
+      const messages = await res.json();
+      if (messages && messages.length !== this.stateCSKH.currentMessages.length) {
+        this.stateCSKH.currentMessages = messages;
+        this.renderCSKHMessages();
+      }
+    } catch (e) {
+      // bỏ qua lỗi ngầm
     }
   },
 
