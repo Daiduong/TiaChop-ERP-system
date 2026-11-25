@@ -161,7 +161,12 @@ webhook.post('/facebook', async (req, res) => {
         }
       }
 
-      for (const ev of entry.messaging || []) {
+      // Hỗ trợ cả entry.messaging (chính) và entry.standby (khi Meta AI Agent / Business Suite đang giữ luồng)
+      const events = [...(entry.messaging || []), ...(entry.standby || [])];
+      if (events.length > 0) {
+        console.log(`📩 [FB Webhook] Nhận ${events.length} sự kiện từ Page ${entry.id}`);
+      }
+      for (const ev of events) {
         const psid = ev?.sender?.id;
         const msg = ev?.message;
         if (!psid || !msg || msg.is_echo) continue;
@@ -377,25 +382,31 @@ router.post('/conversations/simulate', requireRole('ADMIN'), (req, res) => {
   }
 });
 
-router.post('/conversations/:id/ai-analyze', (req, res) => {
+router.post('/conversations/:id/ai-analyze', async (req, res) => {
   try {
-    const rows = db.prepare(`
-      SELECT message_text FROM chat_messages
-      WHERE conversation_id = ? AND sender_type = 'CUSTOMER'
-      ORDER BY created_at DESC, rowid DESC LIMIT 10
+    const { analyzeConversationWithGemini } = require('./ai_assistant');
+    const allRows = db.prepare(`
+      SELECT sender_type, message_text FROM chat_messages
+      WHERE conversation_id = ?
+      ORDER BY created_at DESC, rowid DESC LIMIT 20
     `).all(req.params.id).reverse();
 
-    // rows: cũ → mới. Phân tích từng tin, tin mới nhất ghi đè; SĐT lấy từ bất kỳ tin nào.
-    let merged = null;
-    let phone = null;
-    for (const r of rows) {
-      const a = analyzeMessageForPrintingOrder(r.message_text);
-      if (!a) continue;
-      if (a.customer_phone) phone = a.customer_phone;
-      merged = a;
-    }
-    if (merged) merged.customer_phone = merged.customer_phone || phone;
-    res.json({ success: true, data: merged });
+    const fallbackAnalyzer = () => {
+      const customerRows = allRows.filter(r => r.sender_type === 'CUSTOMER');
+      let merged = null;
+      let phone = null;
+      for (const r of customerRows) {
+        const a = analyzeMessageForPrintingOrder(r.message_text);
+        if (!a) continue;
+        if (a.customer_phone) phone = a.customer_phone;
+        merged = a;
+      }
+      if (merged) merged.customer_phone = merged.customer_phone || phone;
+      return merged;
+    };
+
+    const result = await analyzeConversationWithGemini(allRows, fallbackAnalyzer);
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -490,6 +501,120 @@ router.post('/channels/:id/check', requireRole('ADMIN'), async (req, res) => {
   }
 });
 
+// -----------------------------------------------------------------------------
+// 4. ĐỒNG BỘ HỘI THOẠI & TIN NHẮN THẬT TRỰC TIẾP TỪ FACEBOOK GRAPH API
+// (Hoạt động cả khi chạy localhost không có ngrok hoặc khi Meta AI giữ luồng)
+// -----------------------------------------------------------------------------
+let lastFbSyncAt = 0;
+async function syncFacebookConversations({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastFbSyncAt < 10000) {
+    return { skipped: true, synced_conversations: 0, new_messages: 0 };
+  }
+  const ch = getFbChannel();
+  if (!ch || !ch.page_id || !ch.access_token) {
+    throw new Error('Chưa cấu hình Page ID hoặc Page Access Token');
+  }
+  lastFbSyncAt = now;
+
+  const data = await graph(
+    `/${ch.page_id}/conversations?limit=25&fields=id,updated_time,participants,messages.limit(20){id,from,message,created_time,attachments}`,
+    ch.access_token,
+    { timeoutMs: 12000 }
+  );
+  if (data.error) throw new Error(data.error.message || 'Lỗi gọi Facebook Graph API');
+
+  const convs = Array.isArray(data.data) ? data.data : [];
+  let syncedConvs = 0;
+  let newMsgs = 0;
+
+  const findConv = db.prepare("SELECT id, sender_name FROM chat_conversations WHERE platform = 'FACEBOOK' AND sender_id = ?");
+  const insertConv = db.prepare(`
+    INSERT INTO chat_conversations (id, channel_id, platform, sender_id, sender_name, last_message, last_message_at, unread_count)
+    VALUES (?, ?, 'FACEBOOK', ?, ?, ?, ?, 0)
+  `);
+  const insertMsg = db.prepare(`
+    INSERT OR IGNORE INTO chat_messages (id, conversation_id, sender_type, sender_name, message_text, attachments, suggested_order_data, mid, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const updateConv = db.prepare(`
+    UPDATE chat_conversations
+    SET sender_name = CASE WHEN ? != '' THEN ? ELSE sender_name END,
+        last_message = ?, last_message_at = ?,
+        unread_count = unread_count + ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+
+  const toSqliteUtc = iso => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return new Date().toISOString().replace('T', ' ').slice(0, 19);
+    return d.toISOString().replace('T', ' ').slice(0, 19);
+  };
+
+  db.transaction(() => {
+    for (const c of convs) {
+      const participants = c.participants?.data || [];
+      const customer = participants.find(p => String(p.id) !== String(ch.page_id));
+      if (!customer || !customer.id) continue;
+
+      const psid = String(customer.id);
+      const customerName = customer.name || `Khách Facebook (${psid.slice(-4)})`;
+      const rawMsgs = (c.messages?.data || []).slice().reverse(); // cũ → mới
+      if (rawMsgs.length === 0) continue;
+
+      let existing = findConv.get(psid);
+      let convId = existing?.id;
+      const latestRaw = rawMsgs[rawMsgs.length - 1];
+      const latestText = String(latestRaw.message || '').slice(0, 5000) || (latestRaw.attachments?.data?.length ? '[Hình ảnh / tệp đính kèm]' : '');
+      const latestTime = toSqliteUtc(latestRaw.created_time || c.updated_time);
+
+      if (!convId) {
+        convId = generateId('conv');
+        insertConv.run(convId, ch.id, psid, customerName, latestText, latestTime);
+      }
+
+      let addedCustomerMsgs = 0;
+      for (const m of rawMsgs) {
+        const isPage = String(m.from?.id) === String(ch.page_id);
+        const hasAtt = Array.isArray(m.attachments?.data) && m.attachments.data.length > 0;
+        const text = String(m.message || '').slice(0, 5000) || (hasAtt ? '[Hình ảnh / tệp đính kèm]' : '');
+        if (!text) continue;
+        const attJson = hasAtt ? JSON.stringify(m.attachments.data) : '[]';
+        const suggested = !isPage ? analyzeMessageForPrintingOrder(text) : null;
+        const createdUtc = toSqliteUtc(m.created_time);
+
+        const r = insertMsg.run(
+          generateId('msg'), convId, isPage ? 'AGENT' : 'CUSTOMER',
+          m.from?.name || (isPage ? ch.name : customerName),
+          text, attJson, suggested ? JSON.stringify(suggested) : null,
+          m.id || null, createdUtc
+        );
+        if (r.changes > 0) {
+          newMsgs++;
+          if (!isPage && existing) addedCustomerMsgs++;
+        }
+      }
+
+      updateConv.run(customerName, customerName, latestText, latestTime, addedCustomerMsgs, convId);
+      syncedConvs++;
+    }
+  })();
+
+  return { synced_conversations: syncedConvs, new_messages: newMsgs };
+}
+
+router.post('/sync/facebook', async (req, res) => {
+  try {
+    const force = req.body?.force !== false;
+    const result = await syncFacebookConversations({ force });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.webhook = webhook;
 module.exports.analyzeMessageForPrintingOrder = analyzeMessageForPrintingOrder;
+module.exports.syncFacebookConversations = syncFacebookConversations;

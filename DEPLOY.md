@@ -20,7 +20,7 @@
 4. Cài và chạy:
    ```bash
    cd /var/www/erp && npm install --omit=dev
-   PORT=3000 pm2 start server/index.js --name erp
+   PORT=4000 pm2 start server/index.js --name erp
    pm2 save && pm2 startup
    ```
 5. Nginx: tạo `/etc/nginx/sites-available/erp`
@@ -28,7 +28,7 @@
    server {
      server_name erp.tenmien.com;
      client_max_body_size 20M;
-     location / { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host;
+     location / { proxy_pass http://127.0.0.1:4000; proxy_set_header Host $host;
                   proxy_set_header X-Forwarded-For $remote_addr; }
    }
    ```

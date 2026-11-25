@@ -3295,6 +3295,21 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
               </span>
             </td>
             <td class="cell-nowrap">
+              ${['ADMIN', 'ACCOUNTANT'].includes(this.state.currentRole) ? `
+                <select class="form-control form-control-sm" style="font-size:12px; padding:4px 6px; min-width:135px;"
+                  onchange="App.updateCustomerDebtReminder('${c.id}', this.value)">
+                  <option value="0" ${(Number(c.debt_reminder_days) || 0) === 0 ? 'selected' : ''}>Không nhắc</option>
+                  <option value="7" ${Number(c.debt_reminder_days) === 7 ? 'selected' : ''}>⏱ 1 tuần (7 ngày)</option>
+                  <option value="15" ${Number(c.debt_reminder_days) === 15 ? 'selected' : ''}>⏱ 15 ngày</option>
+                  <option value="30" ${Number(c.debt_reminder_days) === 30 ? 'selected' : ''}>⏱ 1 tháng (30 ngày)</option>
+                </select>
+              ` : `
+                <span style="font-size:12px; color:var(--text-muted);">
+                  ${Number(c.debt_reminder_days) === 7 ? '1 tuần' : (Number(c.debt_reminder_days) === 15 ? '15 ngày' : (Number(c.debt_reminder_days) === 30 ? '1 tháng' : 'Không nhắc'))}
+                </span>
+              `}
+            </td>
+            <td class="cell-nowrap">
               <div style="display:flex; gap:6px;">
                 <button class="btn btn-secondary btn-sm" onclick="App.openEditCustomerModal('${c.id}')" title="Chỉnh sửa thông tin khách hàng">✏️ Sửa</button>
                 <button class="btn btn-primary btn-sm" onclick="App.openNewOrderForCustomer('${c.id}')">+ Lên Đơn</button>
@@ -3319,6 +3334,8 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     document.getElementById('cust-discount').value = '0';
     document.getElementById('cust-address').value = '';
     document.getElementById('cust-default-show-cod').value = '1';
+    const remEl = document.getElementById('cust-debt-reminder-days');
+    if (remEl) remEl.value = '0';
     document.getElementById('cust-tax-company').value = '';
     document.getElementById('cust-tax-code').value = '';
     document.getElementById('cust-tax-email').value = '';
@@ -3341,6 +3358,8 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     document.getElementById('cust-discount').value = c.default_discount || 0;
     document.getElementById('cust-address').value = c.address || '';
     document.getElementById('cust-default-show-cod').value = (c.default_show_cod === 0 || c.default_show_cod === '0') ? '0' : '1';
+    const remEl = document.getElementById('cust-debt-reminder-days');
+    if (remEl) remEl.value = String([0, 7, 15, 30].includes(Number(c.debt_reminder_days)) ? Number(c.debt_reminder_days) : 0);
     document.getElementById('cust-tax-company').value = c.tax_company || '';
     document.getElementById('cust-tax-code').value = c.tax_code || '';
     document.getElementById('cust-tax-email').value = c.tax_email || '';
@@ -3364,6 +3383,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
     const taxCode = document.getElementById('cust-tax-code').value;
     const taxEmail = document.getElementById('cust-tax-email').value;
     const defaultShowCod = parseInt(document.getElementById('cust-default-show-cod')?.value) ?? 1;
+    const debtReminderDays = parseInt(document.getElementById('cust-debt-reminder-days')?.value) || 0;
 
     try {
       const url = isEdit ? `/api/customers/${custId}` : '/api/customers';
@@ -3373,7 +3393,7 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name, code, customer_group: group, phone, default_discount: discount,
-          default_show_cod: defaultShowCod,
+          default_show_cod: defaultShowCod, debt_reminder_days: debtReminderDays,
           address, tax_company: taxCompany, tax_code: taxCode, tax_email: taxEmail
         })
       });
@@ -3409,21 +3429,48 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       // Debt Table
       const debtTbody = document.querySelector('#finance-debt-table tbody');
       if (debtTbody) {
-        debtTbody.innerHTML = data.customerDebts.map(d => `
-          <tr>
-            <td style="min-width: 140px; max-width: 180px;" class="cell-wrap">
-              <strong>${d.name}</strong>
-              <div style="font-size:11px; color:var(--text-dim);">${d.code} - ${d.phone || ''}</div>
-            </td>
-            <td class="cell-nowrap" style="text-align:center;"><span class="badge badge-unpaid">${d.unpaid_orders_count} đơn</span></td>
-            <td class="cell-nowrap" style="text-align:right;">${this.formatCurrency(d.total_ordered)}</td>
-            <td class="cell-nowrap" style="text-align:right; color:var(--accent-green);">${this.formatCurrency(d.total_deposited)}</td>
-            <td class="cell-nowrap" style="text-align:right; font-weight:700; color:var(--accent-rose); font-size:13.5px;">${this.formatCurrency(d.current_debt)}</td>
-            <td class="cell-nowrap" style="text-align:center;">
-              <button class="btn btn-secondary btn-sm" onclick="App.switchTab('orders'); App.state.filters.customer_id='${d.id}'; App.loadOrders();">Xem Các Đơn Nợ</button>
-            </td>
-          </tr>
-        `).join('');
+        if (!data.customerDebts || data.customerDebts.length === 0) {
+          debtTbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">Hiện không có khách hàng nào đang nợ công nợ.</td></tr>`;
+        } else {
+          debtTbody.innerHTML = data.customerDebts.map(d => {
+            const cycle = Number(d.debt_reminder_days) || 0;
+            const days = Number(d.oldest_debt_days) || 0;
+            let statusHtml = `<div style="font-size:11px; color:var(--text-dim); margin-top:3px;">Tuổi nợ cũ nhất: ${days} ngày</div>`;
+            if (d.is_overdue) {
+              const extra = days - cycle;
+              statusHtml = `<div style="font-size:11px; color:#dc2626; font-weight:700; margin-top:3px;">🚨 Quá hạn ${extra > 0 ? extra + ' ngày' : 'hôm nay'}</div>`;
+            } else if (cycle > 0) {
+              const left = Math.max(0, cycle - days);
+              statusHtml = `<div style="font-size:11px; color:var(--accent-green); margin-top:3px;">⏳ Đã nợ ${days}/${cycle} ngày (còn ${left} ngày)</div>`;
+            }
+
+            return `
+              <tr style="${d.is_overdue ? 'background:rgba(239,68,68,0.06);' : ''}">
+                <td style="min-width: 150px; max-width: 190px;" class="cell-wrap">
+                  <strong>${d.name}</strong>
+                  <div style="font-size:11px; color:var(--text-dim);">${d.code || ''} ${d.phone ? '- ' + d.phone : ''}</div>
+                </td>
+                <td class="cell-nowrap" style="text-align:center;"><span class="badge badge-unpaid">${d.unpaid_orders_count} đơn</span></td>
+                <td class="cell-nowrap" style="text-align:right;">${this.formatCurrency(d.total_ordered)}</td>
+                <td class="cell-nowrap" style="text-align:right; color:var(--accent-green);">${this.formatCurrency(d.total_deposited)}</td>
+                <td class="cell-nowrap" style="text-align:right; font-weight:700; color:var(--accent-rose); font-size:13.5px;">${this.formatCurrency(d.current_debt)}</td>
+                <td style="text-align:center; min-width:155px;">
+                  <select class="form-control form-control-sm" style="font-size:12px; padding:4px 6px; width:100%;"
+                    onchange="App.updateCustomerDebtReminder('${d.id}', this.value)">
+                    <option value="0" ${cycle === 0 ? 'selected' : ''}>Không nhắc</option>
+                    <option value="7" ${cycle === 7 ? 'selected' : ''}>⏱ 1 tuần (7 ngày)</option>
+                    <option value="15" ${cycle === 15 ? 'selected' : ''}>⏱ 15 ngày</option>
+                    <option value="30" ${cycle === 30 ? 'selected' : ''}>⏱ 1 tháng (30 ngày)</option>
+                  </select>
+                  ${statusHtml}
+                </td>
+                <td class="cell-nowrap" style="text-align:center;">
+                  <button class="btn btn-secondary btn-sm" onclick="App.switchTab('orders'); App.state.filters.customer_id='${d.id}'; App.loadOrders();">Xem Đơn Nợ</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
       }
 
       // VAT Report
@@ -3453,6 +3500,49 @@ Cảm ơn Quý khách đã tin tưởng đồng hành cùng ${companyName}!`;
       }
     } catch (err) {
       console.error('Error loading finance:', err);
+    }
+  },
+
+  async bulkUpdateCustomerDebtReminder() {
+    const groupEl = document.getElementById('bulk-reminder-group');
+    const daysEl = document.getElementById('bulk-reminder-days');
+    const group = groupEl ? groupEl.value : 'ALL';
+    const days = Number(daysEl ? daysEl.value : 0);
+    const groupLabel = groupEl ? groupEl.options[groupEl.selectedIndex].text : 'Tất cả';
+    const daysLabel = daysEl ? daysEl.options[daysEl.selectedIndex].text : '';
+
+    if (!confirm(`Áp dụng chu kỳ nhắc nợ "${daysLabel}" cho "${groupLabel}"?`)) return;
+    try {
+      const res = await fetch('/api/customers/bulk-debt-reminder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_group: group, debt_reminder_days: days })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật hàng loạt');
+      alert(`✅ Đã cập nhật chu kỳ nhắc nợ cho ${data.updated_count} khách hàng!`);
+      await this.loadCustomers();
+      if (this.state.activeTab === 'finance') this.loadFinance();
+    } catch (err) {
+      alert('❌ ' + err.message);
+    }
+  },
+
+  async updateCustomerDebtReminder(customerId, days) {
+    try {
+      const res = await fetch(`/api/customers/${customerId}/debt-reminder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ debt_reminder_days: Number(days) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi cập nhật chu kỳ nhắc nợ');
+      if (this.state.activeTab === 'finance') await this.loadFinance();
+      if (this.state.activeTab === 'customers' || this.state.customers?.length) await this.loadCustomers();
+    } catch (err) {
+      alert('Lỗi cập nhật chu kỳ nhắc nợ: ' + err.message);
+      if (this.state.activeTab === 'finance') this.loadFinance();
+      if (this.state.activeTab === 'customers') this.loadCustomers();
     }
   },
 

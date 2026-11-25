@@ -21,6 +21,10 @@
     async loadCSKHConversations(isBackground = false) {
       const S = this.stateCSKH;
       try {
+        if (!isBackground && !S.initialSynced) {
+          S.initialSynced = true;
+          this.syncFacebookMessages(false);
+        }
         let url = `/api/cskh/conversations?platform=${encodeURIComponent(S.filterPlatform)}`;
         if (S.searchQuery) url += `&q=${encodeURIComponent(S.searchQuery)}`;
         S.conversations = await this.cskhFetch(url);
@@ -38,11 +42,38 @@
       }
     },
 
+    async syncFacebookMessages(manual = true) {
+      const btn = document.getElementById('btn-cskh-sync-fb');
+      if (manual && btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+      try {
+        const r = await this.cskhFetch('/api/cskh/sync/facebook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ force: manual })
+        });
+        if (!r.skipped && (r.new_messages > 0 || manual)) {
+          await this.loadCSKHConversations(true);
+          if (this.stateCSKH.currentConvId) await this.refreshCurrentCSKHMessages();
+        }
+        if (manual) {
+          alert(`✅ Đã đồng bộ từ Fanpage Facebook!\n• Hội thoại quét: ${r.synced_conversations || 0}\n• Tin nhắn mới tải về: ${r.new_messages || 0}`);
+        }
+      } catch (err) {
+        if (manual) alert('❌ Lỗi đồng bộ Facebook: ' + err.message);
+      } finally {
+        if (manual && btn) { btn.disabled = false; btn.textContent = '🔄 Đồng bộ'; }
+      }
+    },
+
     startCSKHPolling() {
       const S = this.stateCSKH;
       if (S.pollingTimer) return;
+      S.pollTick = 0;
       S.pollingTimer = setInterval(() => {
         if (document.hidden || this.state.activeTab !== 'cskh') return;
+        S.pollTick++;
+        // Mỗi 12 giây tự đồng bộ trực tiếp từ Facebook Graph API (hoạt động kể cả khi chạy local)
+        if (S.pollTick % 3 === 0) this.syncFacebookMessages(false);
         this.loadCSKHConversations(true);
         this.refreshCurrentCSKHMessages();
       }, 4000);
@@ -222,26 +253,98 @@
       if (!S.currentConvId) return;
       const convId = S.currentConvId;
       const box = document.getElementById('cskh-ai-analysis-text');
+      const badge = document.getElementById('cskh-ai-source-badge');
+      const draftBox = document.getElementById('cskh-ai-draft-box');
+      const draftText = document.getElementById('cskh-ai-draft-text');
       const btn = document.getElementById('btn-quick-create-order');
+
+      if (showAlert && box) box.textContent = '⏳ Trợ lý AI đang đọc đoạn chat, tính giá ERP và soạn tin báo giá...';
+
       try {
-        const { data } = await this.cskhFetch(`/api/cskh/conversations/${convId}/ai-analyze`, { method: 'POST' });
+        const resp = await this.cskhFetch(`/api/cskh/conversations/${convId}/ai-analyze`, { method: 'POST' });
         if (convId !== S.currentConvId) return; // người dùng đã chuyển hội thoại
+        const data = resp.data;
         S.latestAiExtracted = data;
+
+        if (badge) {
+          badge.textContent = resp.source === 'GEMINI'
+            ? `✨ ${resp.model || 'Gemini AI'}`
+            : (resp.ai_configured ? '⚙️ Fallback (Lỗi AI)' : '⚙️ Rule cơ bản');
+        }
+
         if (data && data.detected) {
+          const sizeStr = (data.width_mm > 0 && data.height_mm > 0) ? `${data.width_mm} × ${data.height_mm} mm` : '';
+          const missing = Array.isArray(data.missing_info) && data.missing_info.length
+            ? `<div style="margin-top:4px; color:#b45309;"><strong>Cần hỏi thêm:</strong> ${esc(data.missing_info.join(', '))}</div>`
+            : '';
+          const priceHtml = data.estimated_total > 0
+            ? `<div style="margin-top:6px; padding:6px 8px; background:rgba(22,163,74,0.12); border:1px solid rgba(22,163,74,0.35); border-radius:6px; color:#22c55e; font-weight:700;">
+                💰 Giá tham khảo ERP: ${this.formatCurrency(data.estimated_total)}<br>
+                <span style="font-size:11px; font-weight:500;">Đơn giá: ${this.formatCurrency(data.estimated_unit_price)} / ${esc(data.unit || 'cái')} (chưa VAT)</span>
+              </div>`
+            : '';
+
           box.innerHTML = `
             <strong>Sản phẩm:</strong> ${esc(data.product_name)}<br>
-            <strong>Số lượng:</strong> ${this.formatNumber(data.quantity)} ${esc(data.unit)}<br>
+            ${sizeStr ? `<strong>Kích thước:</strong> ${esc(sizeStr)}<br>` : ''}
+            ${data.quantity > 0 ? `<strong>Số lượng:</strong> ${this.formatNumber(data.quantity)} ${esc(data.unit || 'cái')}<br>` : ''}
             <strong>Quy cách:</strong> ${esc(data.specs || 'Chưa rõ — hỏi thêm khách')}<br>
             ${data.customer_phone ? `<strong>SĐT:</strong> ${esc(data.customer_phone)}<br>` : ''}
-            <span style="color:#b45309;">⚠ AI chỉ gợi ý — hãy kiểm tra lại với khách trước khi lưu đơn.</span>`;
+            ${data.customer_address ? `<strong>Địa chỉ:</strong> ${esc(data.customer_address)}<br>` : ''}
+            ${priceHtml}
+            ${missing}`;
+
+          if (draftBox && draftText && data.reply_draft) {
+            draftText.value = data.reply_draft;
+            draftBox.style.display = 'block';
+          } else if (draftBox) {
+            draftBox.style.display = 'none';
+          }
           btn.style.display = 'block';
         } else {
-          box.textContent = 'Chưa nhận diện được yêu cầu in ấn trong đoạn chat này.';
+          if (draftBox && draftText && data?.reply_draft) {
+            draftText.value = data.reply_draft;
+            draftBox.style.display = 'block';
+          } else if (draftBox) {
+            draftBox.style.display = 'none';
+          }
+          box.textContent = 'Chưa nhận diện được yêu cầu báo giá / đặt in cụ thể trong đoạn chat này.';
           btn.style.display = 'none';
-          if (showAlert) alert('Chưa nhận diện được yêu cầu in ấn cụ thể.');
+          if (showAlert && !data?.reply_draft) alert('Chưa nhận diện được yêu cầu in ấn cụ thể trong hội thoại này.');
         }
       } catch (err) {
-        if (box) box.textContent = 'Lỗi phân tích: ' + err.message;
+        if (box) box.textContent = 'Lỗi phân tích AI: ' + err.message;
+      }
+    },
+
+    async sendAIDraftToCustomer() {
+      const S = this.stateCSKH;
+      const draftEl = document.getElementById('cskh-ai-draft-text');
+      const btn = document.getElementById('btn-send-ai-draft');
+      if (!S.currentConvId || !draftEl) return;
+      const text = draftEl.value.trim();
+      if (!text) return;
+      if (!confirm('Gửi nội dung báo giá này tới khách hàng qua Messenger?')) return;
+
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang gửi...'; }
+      try {
+        const data = await this.cskhFetch(`/api/cskh/conversations/${S.currentConvId}/reply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message_text: text })
+        });
+        if (data.warning) {
+          alert('⚠ Tin đã lưu nhưng CHƯA gửi được tới khách:\n' + data.warning);
+        } else {
+          alert('✅ Đã gửi tin nhắn báo giá tới khách hàng trên Messenger!');
+        }
+        S.currentMessages = await this.cskhFetch(`/api/cskh/conversations/${S.currentConvId}/messages`);
+        this.renderCSKHMessages();
+        this.loadCSKHConversations(true);
+      } catch (err) {
+        alert('❌ Lỗi gửi báo giá: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📨 Gửi Báo Giá Này Cho Khách (Messenger)'; }
       }
     },
 
@@ -253,7 +356,14 @@
 
       this.switchTab('orders');
       this.openNewOrderModal({
-        items: [{ item_name: d.product_name, quantity: d.quantity, unit: d.unit, specs: d.specs, unit_price: 0, unit_cost: 0 }]
+        items: [{
+          item_name: d.product_name || 'Ấn phẩm in',
+          quantity: d.quantity || 100,
+          unit: d.unit || 'cái',
+          specs: d.specs || '',
+          unit_price: d.estimated_unit_price || 0,
+          unit_cost: d.estimated_unit_cost || 0
+        }]
       });
 
       if (conv?.customer_id) {
@@ -262,8 +372,10 @@
       }
       const nameEl = document.getElementById('form-order-recipient-name');
       const phoneEl = document.getElementById('form-order-recipient-phone');
+      const addrEl = document.getElementById('form-order-address');
       if (nameEl && conv?.sender_name) nameEl.value = conv.sender_name;
       if (phoneEl) phoneEl.value = d.customer_phone || conv?.sender_phone || '';
+      if (addrEl && d.customer_address) addrEl.value = d.customer_address;
       this.calculateOrderTotals();
     },
 

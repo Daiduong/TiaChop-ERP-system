@@ -54,6 +54,8 @@ window.Admin = {
     if (sub === 'backup') this.loadDbInfo();
     if (sub === 'presets') this.loadPresets();
     if (sub === 'papers') this.loadPapers();
+    if (sub === 'telegram') this.loadTelegramConfig();
+    if (sub === 'ai') this.loadAIConfig();
   },
 
   async api(url, method = 'GET', body) {
@@ -1134,6 +1136,178 @@ window.Admin = {
       }
     };
     input.click();
+  },
+
+  // ==========================================
+  // CẤU HÌNH TELEGRAM NHẮC NỢ QUÁ HẠN (CHỈ ADMIN)
+  // ==========================================
+  async loadTelegramConfig() {
+    try {
+      const cfg = await this.api('/telegram-config');
+      const tokenEl = document.getElementById('tg-debt-bot-token');
+      if (tokenEl) {
+        tokenEl.value = '';
+        tokenEl.placeholder = cfg.has_bot_token
+          ? `Đã lưu (${cfg.bot_token_masked}) — để trống nếu giữ nguyên`
+          : 'VD: 7123456789:AAHxxxxxxxxxxxxxxxxxxxx';
+      }
+      const chatEl = document.getElementById('tg-debt-chat-id');
+      if (chatEl) chatEl.value = cfg.telegram_chat_id || '';
+      const hourEl = document.getElementById('tg-debt-hour');
+      if (hourEl) hourEl.value = cfg.telegram_debt_hour || '08:30';
+      const enEl = document.getElementById('tg-debt-enabled');
+      if (enEl) enEl.checked = !!cfg.telegram_debt_enabled;
+
+      const badge = document.getElementById('admin-tg-status-badge');
+      if (badge) {
+        if (cfg.has_bot_token && cfg.telegram_chat_id && cfg.telegram_debt_enabled) {
+          badge.textContent = `🟢 Tự động (${cfg.telegram_debt_hour})${cfg.overdue_count > 0 ? ` • ${cfg.overdue_count} KH quá hạn` : ''}`;
+          badge.style.background = '#dcfce7';
+          badge.style.color = '#166534';
+        } else if (cfg.has_bot_token && cfg.telegram_chat_id) {
+          badge.textContent = '🟡 Đã lưu (đang tắt tự động)';
+          badge.style.background = '#fef9c3';
+          badge.style.color = '#854d0e';
+        } else {
+          badge.textContent = '⚪ Chưa cấu hình';
+          badge.style.background = 'rgba(148,163,184,0.18)';
+          badge.style.color = 'var(--text-muted)';
+        }
+      }
+
+      const logs = await this.api('/debt-reminder/logs').catch(() => []);
+      const logEl = document.getElementById('tg-debt-logs');
+      if (logEl) {
+        if (Array.isArray(logs) && logs.length > 0) {
+          logEl.innerHTML = logs.map(l => {
+            const dt = l.created_at ? new Date(String(l.created_at).replace(' ', 'T') + 'Z').toLocaleString('vi-VN') : '';
+            const icon = l.status === 'SENT' ? '✅' : '❌';
+            const amt = window.App ? App.formatCurrency(l.overdue_amount) : `${l.overdue_amount} đ`;
+            return `<div style="padding:6px 0; border-bottom:1px dashed var(--border-subtle);">
+              ${icon} <strong>${l.customer_name || ''}</strong> — ${amt} (nợ ${l.overdue_days} ngày / hạn ${l.reminder_cycle_days} ngày)
+              <div style="color:var(--text-muted); font-size:11px;">${dt}</div>
+              ${l.error_message ? `<div style="color:#dc2626; font-size:11px;">${l.error_message}</div>` : ''}
+            </div>`;
+          }).join('');
+        } else {
+          logEl.textContent = 'Chưa có lịch sử gửi cảnh báo.';
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải cấu hình Telegram:', err);
+    }
+  },
+
+  async saveTelegramConfig() {
+    const feedback = document.getElementById('tg-debt-feedback');
+    try {
+      await this.api('/telegram-config', 'PUT', {
+        telegram_bot_token: document.getElementById('tg-debt-bot-token')?.value.trim() || '',
+        telegram_chat_id: document.getElementById('tg-debt-chat-id')?.value.trim() || '',
+        telegram_debt_hour: document.getElementById('tg-debt-hour')?.value.trim() || '08:30',
+        telegram_debt_enabled: !!document.getElementById('tg-debt-enabled')?.checked
+      });
+      if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ Đã lưu cấu hình Telegram nhắc nợ thành công!</span>`;
+      await this.loadTelegramConfig();
+    } catch (err) {
+      if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
+  },
+
+  async testTelegramConfig() {
+    const feedback = document.getElementById('tg-debt-feedback');
+    if (feedback) feedback.innerHTML = `<span style="color:var(--primary-light);">⏳ Đang gửi tin nhắn thử nghiệm tới Telegram...</span>`;
+    try {
+      const data = await this.api('/telegram-test', 'POST', {
+        telegram_bot_token: document.getElementById('tg-debt-bot-token')?.value.trim() || '',
+        telegram_chat_id: document.getElementById('tg-debt-chat-id')?.value.trim() || ''
+      });
+      if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ ${data.message}</span>`;
+    } catch (err) {
+      if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
+  },
+
+  async runDebtReminderNow() {
+    if (!confirm('Kiểm tra toàn bộ khách hàng quá hạn công nợ và gửi báo cáo ngay qua Telegram Admin?')) return;
+    const feedback = document.getElementById('tg-debt-feedback');
+    if (feedback) feedback.innerHTML = `<span style="color:var(--primary-light);">⏳ Đang quét công nợ quá hạn và gửi Telegram...</span>`;
+    try {
+      const data = await this.api('/debt-reminder/run', 'POST');
+      if (data.sent) {
+        const amt = window.App ? App.formatCurrency(data.total_overdue_amount) : `${data.total_overdue_amount} đ`;
+        if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ Đã gửi cảnh báo Telegram cho ${data.reminded_count} khách quá hạn (Tổng: ${amt})</span>`;
+      } else {
+        if (feedback) feedback.innerHTML = `<span style="color:var(--text-muted);">ℹ️ ${data.message || 'Hiện không có khách hàng nào quá hạn công nợ.'}</span>`;
+      }
+      await this.loadTelegramConfig();
+    } catch (err) {
+      if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
+  },
+
+  // ==========================================
+  // CẤU HÌNH TRỢ LÝ AI GEMINI (GOOGLE AI STUDIO)
+  // ==========================================
+  async loadAIConfig() {
+    try {
+      const cfg = await this.api('/ai-config');
+      const keyEl = document.getElementById('ai-conf-api-key');
+      if (keyEl) {
+        keyEl.value = '';
+        keyEl.placeholder = cfg.has_api_key
+          ? `Đã lưu (${cfg.api_key_masked}) — để trống nếu giữ nguyên`
+          : 'Dán mã API Key (AIzaSy...) từ aistudio.google.com';
+      }
+      const modelEl = document.getElementById('ai-conf-model');
+      if (modelEl && cfg.gemini_model) modelEl.value = cfg.gemini_model;
+      const promptEl = document.getElementById('ai-conf-prompt');
+      if (promptEl) promptEl.value = cfg.gemini_system_prompt || '';
+
+      const badge = document.getElementById('admin-ai-status-badge');
+      if (badge) {
+        if (cfg.has_api_key) {
+          badge.textContent = `🟢 Đã kết nối (${cfg.gemini_model})`;
+          badge.style.background = '#dcfce7';
+          badge.style.color = '#166534';
+        } else {
+          badge.textContent = '⚪ Chưa cấu hình API Key';
+          badge.style.background = 'rgba(148,163,184,0.18)';
+          badge.style.color = 'var(--text-muted)';
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải cấu hình AI:', err);
+    }
+  },
+
+  async saveAIConfig() {
+    const feedback = document.getElementById('ai-conf-feedback');
+    try {
+      await this.api('/ai-config', 'PUT', {
+        gemini_api_key: document.getElementById('ai-conf-api-key')?.value.trim() || '',
+        gemini_model: document.getElementById('ai-conf-model')?.value || 'gemini-4-hydrogen',
+        gemini_system_prompt: document.getElementById('ai-conf-prompt')?.value.trim() || ''
+      });
+      if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ Đã lưu cấu hình Google AI Studio (Gemini) thành công!</span>`;
+      await this.loadAIConfig();
+    } catch (err) {
+      if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
+  },
+
+  async testAIConfig() {
+    const feedback = document.getElementById('ai-conf-feedback');
+    if (feedback) feedback.innerHTML = `<span style="color:var(--primary-light);">⏳ Đang gọi thử Google Gemini API...</span>`;
+    try {
+      const data = await this.api('/ai-test', 'POST', {
+        gemini_api_key: document.getElementById('ai-conf-api-key')?.value.trim() || '',
+        gemini_model: document.getElementById('ai-conf-model')?.value || 'gemini-4-hydrogen'
+      });
+      if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ Kết nối thành công (${data.model}):</span> <em>"${data.reply}"</em>`;
+    } catch (err) {
+      if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
   }
 };
 

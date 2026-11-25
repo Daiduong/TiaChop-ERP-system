@@ -915,6 +915,25 @@
               </div>
             </div>
 
+            <!-- Thanh gán nhanh chu kỳ nhắc nợ theo nhóm khách hàng -->
+            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; margin-bottom:12px; background:rgba(56,189,248,0.06); border:1px solid var(--border-subtle); border-radius:var(--radius-md); font-size:12.5px;">
+              <span style="font-weight:700; color:var(--primary-light);">⏱ Gán nhanh chu kỳ nhắc nợ:</span>
+              <select id="bulk-reminder-group" class="form-control form-control-sm" style="width:auto; min-width:170px;">
+                <option value="ALL">Tất cả khách hàng</option>
+                <option value="CORPORATE">Nhóm Doanh Nghiệp / Công Ty</option>
+                <option value="B2B_CHAIN">Nhóm Chuỗi F&amp;B / Cửa Hàng</option>
+                <option value="SCHOOL">Nhóm Trường Học / Y Tế</option>
+                <option value="RETAIL">Nhóm Khách Lẻ / Cá Nhân</option>
+              </select>
+              <select id="bulk-reminder-days" class="form-control form-control-sm" style="width:auto; min-width:145px;">
+                <option value="7">1 tuần (7 ngày)</option>
+                <option value="15" selected>15 ngày</option>
+                <option value="30">1 tháng (30 ngày)</option>
+                <option value="0">Tắt nhắc nợ</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="App.bulkUpdateCustomerDebtReminder()">✓ Áp Dụng Nhanh</button>
+            </div>
+
             <div class="table-responsive">
               <table class="data-table" id="customers-main-table">
                 <thead>
@@ -926,6 +945,7 @@
                     <th>Chiết Khấu</th>
                     <th>Thông Tin Thuế (VAT)</th>
                     <th>Công Nợ Hiện Tại</th>
+                    <th style="min-width:145px;">Nhắc Nợ (Telegram)</th>
                     <th>Thao Tác</th>
                   </tr>
                 </thead>
@@ -939,22 +959,23 @@
 
         <!-- ==================== TAB CSKH: CHĂM SÓC KHÁCH HÀNG & AI ==================== -->
         <section class="tab-view" id="tab-cskh">
-          <div style="display: grid; grid-template-columns: 340px 1fr 340px; gap: 16px; height: calc(100vh - 120px); min-height: 600px;">
+          <div style="display: grid; grid-template-columns: minmax(235px, 270px) minmax(0, 1fr) minmax(265px, 320px); gap: 12px; height: calc(100vh - 120px); min-height: 600px;">
             
             <!-- Cột 1: Danh sách hội thoại khách hàng -->
-            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 14px; overflow: hidden;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <h3 style="font-size: 15px; font-weight: 700; display:flex; align-items:center; gap:6px;">
+            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 12px; overflow: hidden; min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; flex-wrap: wrap;">
+                <h3 style="font-size: 14px; font-weight: 700; display:flex; align-items:center; gap:6px; margin:0;">
                   <span>💬 Hội Thoại</span>
                   <span class="badge" id="cskh-conv-count" style="font-size:11px; background:var(--bg-card-secondary);">0</span>
                 </h3>
-                <div style="display: flex; gap: 6px; align-items:center;">
-                  <span id="cskh-channel-status-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; background: #dcfce7; color: #166534;" title="Trạng thái kết nối">
-                    🟢 Đã lưu Fanpage
-                  </span>
-                  <button class="btn btn-secondary btn-sm" onclick="App.openCSKHSettingsModal()" title="Cấu hình kết nối Facebook & Zalo">⚙️ Kênh</button>
-                  <button class="btn btn-secondary btn-sm" onclick="App.simulateTestChat()" title="Tạo tin nhắn khách hàng mẫu để thử nghiệm">+ Test</button>
-                </div>
+                <span id="cskh-channel-status-badge" style="font-size: 10.5px; padding: 2px 7px; border-radius: 10px; font-weight: 600; background: #dcfce7; color: #166534;" title="Trạng thái kết nối">
+                  🟢 Fanpage
+                </span>
+              </div>
+              <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button class="btn btn-secondary btn-sm" id="btn-cskh-sync-fb" onclick="App.syncFacebookMessages(true)" title="Kéo tin nhắn mới nhất trực tiếp từ Fanpage Facebook" style="flex:1; padding:4px 6px; font-size:11.5px;">🔄 Đồng bộ</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.openCSKHSettingsModal()" title="Cấu hình kết nối Facebook & Zalo" style="padding:4px 8px; font-size:11.5px;">⚙️ Kênh</button>
+                <button class="btn btn-secondary btn-sm" onclick="App.simulateTestChat()" title="Tạo tin nhắn khách hàng mẫu để thử nghiệm" style="padding:4px 8px; font-size:11.5px;">+ Test</button>
               </div>
 
               <!-- Bộ lọc và tìm kiếm -->
@@ -974,7 +995,7 @@
             </div>
 
             <!-- Cột 2: Cửa sổ nhắn tin trực tiếp -->
-            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 0; overflow: hidden; background: var(--bg-card);">
+            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 0; overflow: hidden; background: var(--bg-card); min-width: 0;">
               <!-- Header cuộc trò chuyện -->
               <div id="cskh-chat-header" style="padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; background: var(--bg-card-secondary);">
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -1006,17 +1027,34 @@
             </div>
 
             <!-- Cột 3: Hồ sơ khách & Trợ lý AI Báo giá / Chốt đơn tự động -->
-            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 14px; overflow-y: auto;">
-              <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; display:flex; align-items:center; gap:6px;">
-                <span>⚡ Trợ Lý AI &amp; Tạo Đơn Nhanh</span>
+            <div class="card-panel" style="display: flex; flex-direction: column; margin-bottom: 0; padding: 12px; overflow-y: auto; min-width: 0;">
+              <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 10px; display:flex; align-items:center; gap:6px;">
+                <span>✨ Trợ Lý AI &amp; Tạo Đơn Nhanh</span>
               </h3>
 
+              <button type="button" class="btn btn-primary btn-sm" onclick="App.aiAnalyzeCurrentChat(true)" style="width:100%; margin-bottom:10px; font-weight:700;">
+                🤖 AI Đọc Chat &amp; Soạn Báo Giá Ngay
+              </button>
+
               <div id="cskh-ai-box" style="background: rgba(14, 165, 233, 0.06); border: 1px dashed var(--primary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 14px;">
-                <div style="font-size: 12px; font-weight: 700; color: var(--primary-light); margin-bottom: 6px;">🤖 Phân tích AI từ tin nhắn:</div>
-                <div id="cskh-ai-analysis-text" style="font-size: 12px; color: var(--text-secondary); line-height: 1.45;">
-                  Chọn khách hàng có nhu cầu in ấn rồi bấm <strong>"AI Báo Giá / Chốt Đơn"</strong> để tự động bóc tách quy cách &amp; số lượng.
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                  <div style="font-size: 12px; font-weight: 700; color: var(--primary-light);">🤖 Phân tích AI từ tin nhắn:</div>
+                  <span id="cskh-ai-source-badge" style="font-size:10.5px; color:var(--text-muted);"></span>
                 </div>
-                <button id="btn-quick-create-order" class="btn btn-accent btn-sm" onclick="App.createOrderFromCSKH()" style="width:100%; margin-top:10px; display:none;">
+                <div id="cskh-ai-analysis-text" style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+                  Chọn khách hàng có nhu cầu in ấn rồi bấm <strong>"🤖 AI Báo Giá / Chốt Đơn"</strong> để đọc hội thoại, tính giá dự kiến và soạn tin báo giá.
+                </div>
+
+                <!-- Hộp tin nhắn báo giá AI soạn sẵn -->
+                <div id="cskh-ai-draft-box" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border-subtle);">
+                  <label class="form-label" style="font-size:11.5px; margin-bottom:4px;">💬 Tin nhắn báo giá / tư vấn AI soạn sẵn (có thể sửa trước khi gửi):</label>
+                  <textarea id="cskh-ai-draft-text" class="form-control" rows="5" style="font-size:12px; line-height:1.45;"></textarea>
+                  <button type="button" id="btn-send-ai-draft" class="btn btn-primary btn-sm" onclick="App.sendAIDraftToCustomer()" style="width:100%; margin-top:8px;">
+                    📨 Gửi Báo Giá Này Cho Khách (Messenger)
+                  </button>
+                </div>
+
+                <button id="btn-quick-create-order" class="btn btn-accent btn-sm" onclick="App.createOrderFromCSKH()" style="width:100%; margin-top:8px; display:none;">
                   ⚡ Chuyển Sang Tạo Đơn Hàng Ngay
                 </button>
               </div>
@@ -1046,11 +1084,11 @@
           <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr); gap: 20px; align-items: start;">
             <!-- Sổ công nợ phải thu của khách hàng -->
             <div class="card-panel" style="margin-bottom: 0;">
-              <div class="panel-header">
+              <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
                 <div>
                   <h2 class="panel-title">⏳ Sổ Công Nợ Phải Thu (AR) Theo Khách Hàng</h2>
                   <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                    Theo dõi số tiền còn nợ của các khách hàng lớn (Texas, ITD, Ruby School...)
+                    Theo dõi công nợ &amp; cấu hình chu kỳ nhắc nợ tự động (1 tuần / 15 ngày / 1 tháng) theo từng khách hàng.
                   </p>
                 </div>
               </div>
@@ -1058,12 +1096,13 @@
                 <table class="data-table" id="finance-debt-table">
                   <thead>
                     <tr>
-                      <th style="min-width: 140px;">Khách Hàng</th>
-                      <th style="text-align: center; width: 80px;">Số Đơn</th>
-                      <th style="text-align: right; min-width: 100px;">Tổng Đã Đặt</th>
-                      <th style="text-align: right; min-width: 90px;">Đã Cọc</th>
+                      <th style="min-width: 150px;">Khách Hàng</th>
+                      <th style="text-align: center; width: 70px;">Số Đơn</th>
+                      <th style="text-align: right; min-width: 95px;">Tổng Đã Đặt</th>
+                      <th style="text-align: right; min-width: 85px;">Đã Cọc</th>
                       <th style="text-align: right; min-width: 100px;">Còn Nợ</th>
-                      <th style="text-align: center; width: 110px;">Thao Tác</th>
+                      <th style="text-align: center; min-width: 155px;">Chu Kỳ Nhắc Nợ</th>
+                      <th style="text-align: center; width: 105px;">Thao Tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1391,7 +1430,120 @@
             <button class="filter-btn" data-admin-sub="template">🖨️ Thông Tin Mẫu In</button>
             <button class="filter-btn" data-admin-sub="prices">💲 Bảng Giá Vật Tư & Gia Công</button>
             <button class="filter-btn" data-admin-sub="pricecheck">✅ Kiểm Tra & Lịch Sử Giá</button>
+            <button class="filter-btn" data-admin-sub="ai">✨ Trợ Lý AI (Gemini)</button>
+            <button class="filter-btn" data-admin-sub="telegram">🤖 Thông Báo Telegram</button>
             <button class="filter-btn" data-admin-sub="backup">💾 Sao Lưu & Khôi Phục Dữ Liệu</button>
+          </div>
+
+          <!-- TRỢ LÝ AI GEMINI (GOOGLE AI STUDIO - CHỈ ADMIN) -->
+          <div class="card-panel admin-sub" id="admin-sub-ai" style="display:none;">
+            <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 class="panel-title">✨ Cấu Hình Trợ Lý AI Báo Giá &amp; Tạo Đơn (Google AI Studio)</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                  Kết nối API Key từ Google AI Studio để AI tự động đọc tin nhắn Messenger, nhận diện quy cách in, tính giá tham khảo và soạn tin báo giá gửi khách.
+                </p>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span id="admin-ai-status-badge" style="font-size:12px; padding:4px 10px; border-radius:12px; font-weight:600; background:rgba(148,163,184,0.18); color:var(--text-muted);">
+                  Chưa cấu hình API Key
+                </span>
+                <button class="btn btn-secondary btn-sm" onclick="Admin.testAIConfig()">🧪 Kiểm Tra Kết Nối AI</button>
+                <button class="btn btn-primary btn-sm" onclick="Admin.saveAIConfig()">💾 Lưu Cấu Hình AI</button>
+              </div>
+            </div>
+
+            <div style="background: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--primary); padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; font-size: 12.5px; line-height: 1.55;">
+              <strong>Cách lấy API Key miễn phí / trả phí từ Google AI Studio:</strong><br>
+              1. Truy cập <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener" style="color:var(--primary-light); font-weight:700; text-decoration:underline;">https://aistudio.google.com/app/api-keys</a> và đăng nhập tài khoản Google.<br>
+              2. Bấm <strong>Create API key</strong> → Sao chép mã API Key và dán vào ô bên dưới.<br>
+              3. Bấm <strong>🧪 Kiểm Tra Kết Nối AI</strong> rồi <strong>💾 Lưu Cấu Hình AI</strong>. Sau đó vào tab <strong>💬 CSKH Đa Kênh &amp; AI</strong> để sử dụng ngay!
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Google AI Studio API Key *</label>
+                <input type="password" class="form-control" id="ai-conf-api-key" autocomplete="off" placeholder="Dán mã API Key (AIzaSy...) từ aistudio.google.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mô Hình Gemini</label>
+                <select class="form-control" id="ai-conf-model">
+                  <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Khuyên dùng — Nhanh &amp; Chuẩn)</option>
+                  <option value="gemini-4-argon">Gemini 4 Argon (Suy luận sâu cho đơn phức tạp)</option>
+                  <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Siêu nhanh, tiết kiệm chi phí)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Hướng Dẫn Tư Vấn &amp; Phong Cách Báo Giá (System Prompt)</label>
+              <textarea class="form-control" id="ai-conf-prompt" rows="6" placeholder="Nhập quy tắc xưng hô, chính sách giao hàng, chiết khấu để AI soạn báo giá đúng chuẩn In Tia Chớp..."></textarea>
+            </div>
+
+            <div id="ai-conf-feedback" style="margin-top:10px; font-size:12.5px;"></div>
+          </div>
+
+          <!-- TELEGRAM NHẮC NỢ TỰ ĐỘNG (CHỈ ADMIN) -->
+          <div class="card-panel admin-sub" id="admin-sub-telegram" style="display:none;">
+            <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 class="panel-title">🤖 Cấu Hình Nhắc Nợ Quá Hạn Qua Telegram (Chỉ Admin)</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                  Tự động quét tổng công nợ theo chu kỳ từng khách hàng (1 tuần / 15 ngày / 1 tháng) và gửi cảnh báo về Telegram của Admin khi quá hạn.
+                </p>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span id="admin-tg-status-badge" style="font-size:12px; padding:4px 10px; border-radius:12px; font-weight:600; background:rgba(148,163,184,0.18); color:var(--text-muted);">
+                  Chưa cấu hình
+                </span>
+                <button class="btn btn-secondary btn-sm" onclick="Admin.testTelegramConfig()">🧪 Gửi Tin Test</button>
+                <button class="btn btn-accent btn-sm" onclick="Admin.runDebtReminderNow()">📨 Quét &amp; Báo Nợ Ngay</button>
+                <button class="btn btn-primary btn-sm" onclick="Admin.saveTelegramConfig()">💾 Lưu Cấu Hình</button>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap:20px; align-items:start;">
+              <div>
+                <div style="background: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--primary); padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; font-size: 12px; line-height: 1.55;">
+                  <strong>Cách lấy Bot Token &amp; Chat ID trong 1 phút:</strong><br>
+                  1. Nhắn cho <code>@BotFather</code> trên Telegram → gõ <code>/newbot</code> để tạo Bot và copy <strong>Bot Token</strong>.<br>
+                  2. Nhắn 1 tin bất kỳ cho Bot vừa tạo (hoặc thêm Bot vào nhóm Admin).<br>
+                  3. Nhắn cho <code>@userinfobot</code> (hoặc <code>@RawDataBot</code>) để lấy số <strong>Chat ID</strong> của Admin/Nhóm.
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Telegram Bot Token</label>
+                  <input type="password" class="form-control" id="tg-debt-bot-token" autocomplete="off" placeholder="VD: 7123456789:AAHxxxxxxxxxxxxxxxxxxxx">
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Chat ID nhận thông báo (Admin / Group)</label>
+                    <input type="text" class="form-control" id="tg-debt-chat-id" placeholder="VD: 123456789 hoặc -1001234567890">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Giờ tự động quét &amp; báo hằng ngày</label>
+                    <input type="time" class="form-control" id="tg-debt-hour" value="08:30">
+                  </div>
+                </div>
+
+                <div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                  <input type="checkbox" id="tg-debt-enabled" style="width:18px; height:18px; cursor:pointer;">
+                  <label for="tg-debt-enabled" style="font-size:13px; font-weight:600; cursor:pointer; margin:0;">
+                    Bật tự động kiểm tra và gửi cảnh báo qua Telegram khi khách hàng quá hạn công nợ
+                  </label>
+                </div>
+
+                <div id="tg-debt-feedback" style="margin-top:10px; font-size:12.5px;"></div>
+              </div>
+
+              <div style="background:rgba(0,0,0,0.12); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px;">
+                <div style="font-size:13px; font-weight:700; margin-bottom:10px;">📜 Lịch Sử Gửi Cảnh Báo Công Nợ Gần Đây</div>
+                <div id="tg-debt-logs" style="max-height:300px; overflow-y:auto; font-size:12px; color:var(--text-secondary);">
+                  Chưa có lịch sử gửi cảnh báo.
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- PAPERS (QUẢN LÝ LOẠI GIẤY) -->
@@ -2082,14 +2234,22 @@
           <input type="text" id="cust-address" class="form-control" placeholder="Địa chỉ giao nhận hàng">
         </div>
 
-        <div class="form-group" style="margin-top: 10px;">
-          <label class="form-label">Chính Sách COD Mặc Định Khi In Phiếu Giao</label>
-          <select id="cust-default-show-cod" class="form-control">
-            <option value="1" selected>💵 Luôn hiện số tiền thu hộ (COD) trên phiếu giao</option>
-            <option value="0">🔒 Ẩn số tiền thu hộ (Khách công nợ / đại lý / chuyển khoản trước)</option>
-          </select>
-          <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px;">
-            Khi lên đơn mới cho khách hàng này, hệ thống sẽ tự động áp dụng tùy chọn hiển thị COD theo cấu hình ở đây.
+        <div class="form-row" style="margin-top: 10px;">
+          <div class="form-group">
+            <label class="form-label">Chính Sách COD Mặc Định Khi In Phiếu Giao</label>
+            <select id="cust-default-show-cod" class="form-control">
+              <option value="1" selected>💵 Luôn hiện số tiền thu hộ (COD)</option>
+              <option value="0">🔒 Ẩn số tiền thu hộ (Công nợ / Đại lý)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chu Kỳ Nhắc Nợ Tự Động (Telegram)</label>
+            <select id="cust-debt-reminder-days" class="form-control">
+              <option value="0" selected>Không nhắc tự động</option>
+              <option value="7">⏱ 1 tuần (7 ngày)</option>
+              <option value="15">⏱ 15 ngày</option>
+              <option value="30">⏱ 1 tháng (30 ngày)</option>
+            </select>
           </div>
         </div>
 

@@ -485,17 +485,20 @@ function seedInitialData() {
   console.log('✅ Nạp dữ liệu mẫu ban đầu thành công!');
 }
 
-// Migration tự động đảm bảo các cột cần thiết tồn tại
-(function runMigrations() {
-  try {
-    db.exec('ALTER TABLE orders ADD COLUMN show_cod_on_delivery INTEGER DEFAULT 1');
-  } catch (e) {}
-  try {
-    db.exec('ALTER TABLE customers ADD COLUMN default_show_cod INTEGER DEFAULT 1');
-  } catch (e) {}
-})();
-
 initDatabase();
+
+// Migration tự động đảm bảo các cột cần thiết tồn tại (chạy sau initDatabase để hỗ trợ cả DB mới lẫn DB cũ)
+(function runMigrations() {
+  const migrations = [
+    'ALTER TABLE orders ADD COLUMN show_cod_on_delivery INTEGER DEFAULT 1',
+    'ALTER TABLE customers ADD COLUMN default_show_cod INTEGER DEFAULT 1',
+    'ALTER TABLE customers ADD COLUMN debt_reminder_days INTEGER DEFAULT 0',
+    'ALTER TABLE customers ADD COLUMN last_debt_reminded_at DATETIME'
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch (e) { /* cột đã tồn tại */ }
+  }
+})();
 
 module.exports = {
   db,

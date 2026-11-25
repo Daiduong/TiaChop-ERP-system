@@ -159,16 +159,17 @@ router.get('/customers', (req, res) => {
 
 router.post('/customers', (req, res) => {
   try {
-    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes, contacts } = req.body;
+    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, debt_reminder_days, notes, contacts } = req.body;
     const id = generateId('kh');
     const autoCode = code || `KH${Date.now().toString().slice(-4)}`;
     const showCod = (default_show_cod === 0 || default_show_cod === '0' || default_show_cod === false) ? 0 : 1;
+    const parsedReminder = [0, 7, 15, 30].includes(Number(debt_reminder_days)) ? Number(debt_reminder_days) : 0;
 
     const insert = db.prepare(`
-      INSERT INTO customers (id, code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes, created_by_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO customers (id, code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, debt_reminder_days, notes, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    insert.run(id, autoCode, name, phone || '', email || '', address || '', customer_group || 'RETAIL', tax_company || '', tax_code || '', tax_email || '', default_discount || 0, showCod, notes || '', req.user?.id || null);
+    insert.run(id, autoCode, name, phone || '', email || '', address || '', customer_group || 'RETAIL', tax_company || '', tax_code || '', tax_email || '', default_discount || 0, showCod, parsedReminder, notes || '', req.user?.id || null);
 
     // Lưu người liên hệ nếu có
     if (Array.isArray(contacts)) {
@@ -192,13 +193,17 @@ router.post('/customers', (req, res) => {
 // Cập nhật thông tin khách hàng
 router.put('/customers/:id', (req, res) => {
   try {
-    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, notes } = req.body;
+    const { code, name, phone, email, address, customer_group, tax_company, tax_code, tax_email, default_discount, default_show_cod, debt_reminder_days, notes } = req.body;
     const existing = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
 
     const showCod = (default_show_cod !== undefined && default_show_cod !== null)
       ? ((default_show_cod === 0 || default_show_cod === '0' || default_show_cod === false) ? 0 : 1)
       : (existing.default_show_cod !== undefined ? existing.default_show_cod : 1);
+
+    const reminderDays = (debt_reminder_days !== undefined && debt_reminder_days !== null)
+      ? ([0, 7, 15, 30].includes(Number(debt_reminder_days)) ? Number(debt_reminder_days) : 0)
+      : (existing.debt_reminder_days || 0);
 
     db.prepare(`
       UPDATE customers SET
@@ -213,6 +218,7 @@ router.put('/customers/:id', (req, res) => {
         tax_email = COALESCE(?, tax_email),
         default_discount = COALESCE(?, default_discount),
         default_show_cod = ?,
+        debt_reminder_days = ?,
         notes = COALESCE(?, notes)
       WHERE id = ?
     `).run(
@@ -220,6 +226,7 @@ router.put('/customers/:id', (req, res) => {
       customer_group || null, tax_company || null, tax_code || null, tax_email || null,
       default_discount !== undefined ? default_discount : null,
       showCod,
+      reminderDays,
       notes !== undefined ? notes : null,
       req.params.id
     );
@@ -238,6 +245,47 @@ router.put('/customers/:id', (req, res) => {
     }
 
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Áp dụng nhanh chu kỳ nhắc nợ cho nhiều khách hàng cùng lúc (theo nhóm hoặc tất cả)
+router.patch('/customers/bulk-debt-reminder', (req, res) => {
+  try {
+    if (!['ADMIN', 'ACCOUNTANT'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Chỉ Admin hoặc Kế toán được cấu hình nhắc nợ' });
+    }
+    const days = Number(req.body?.debt_reminder_days);
+    const group = String(req.body?.customer_group || 'ALL').trim();
+    if (![0, 7, 15, 30].includes(days)) {
+      return res.status(400).json({ error: 'Chu kỳ nhắc nợ không hợp lệ (chỉ nhận 0, 7, 15, 30)' });
+    }
+    let result;
+    if (group === 'ALL') {
+      result = db.prepare('UPDATE customers SET debt_reminder_days = ?').run(days);
+    } else {
+      result = db.prepare('UPDATE customers SET debt_reminder_days = ? WHERE customer_group = ?').run(days, group);
+    }
+    res.json({ success: true, updated_count: result.changes, debt_reminder_days: days });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật nhanh chu kỳ nhắc nợ công nợ của khách hàng (0 = tắt, 7 = 1 tuần, 15 = 15 ngày, 30 = 1 tháng)
+router.patch('/customers/:id/debt-reminder', (req, res) => {
+  try {
+    if (!['ADMIN', 'ACCOUNTANT'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Chỉ Admin hoặc Kế toán được cấu hình nhắc nợ' });
+    }
+    const days = Number(req.body?.debt_reminder_days);
+    if (![0, 7, 15, 30].includes(days)) {
+      return res.status(400).json({ error: 'Chu kỳ nhắc nợ chỉ hỗ trợ: Không nhắc (0), 1 tuần (7), 15 ngày (15), 1 tháng (30)' });
+    }
+    const r = db.prepare('UPDATE customers SET debt_reminder_days = ? WHERE id = ?').run(days, req.params.id);
+    if (r.changes === 0) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
+    res.json({ success: true, debt_reminder_days: days });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1275,20 +1323,40 @@ router.post('/pricing/calculate', (req, res) => {
 // ==========================================
 router.get('/finance', (req, res) => {
   try {
+    const { parseDbDateMs } = require('./debt_reminder');
+    const nowMs = Date.now();
+
     // Sổ công nợ phải thu của khách hàng (AR)
-    const customerDebts = db.prepare(`
+    const rawDebts = db.prepare(`
       SELECT c.id, c.code, c.name, c.phone,
+        COALESCE(c.debt_reminder_days, 0) as debt_reminder_days,
+        c.last_debt_reminded_at,
         COUNT(o.id) as unpaid_orders_count,
         COALESCE(SUM(o.total_selling), 0) as total_ordered,
         COALESCE(SUM(o.deposit_amount), 0) as total_deposited,
-        COALESCE(SUM(o.remaining_amount), 0) as current_debt
+        COALESCE(SUM(o.remaining_amount), 0) as current_debt,
+        MIN(o.created_at) as oldest_unpaid_date
       FROM customers c
       JOIN orders o ON o.customer_id = c.id
-      WHERE o.payment_status != 'PAID' AND o.type = 'ORDER'
+      WHERE o.payment_status != 'PAID' AND o.type = 'ORDER' AND o.status != 'CANCELLED'
       GROUP BY c.id
       HAVING current_debt > 0
       ORDER BY current_debt DESC
     `).all();
+
+    // Tính tuổi công nợ & trạng thái quá hạn theo từng KHÁCH HÀNG
+    const customerDebts = rawDebts.map(d => {
+      const oldestMs = parseDbDateMs(d.oldest_unpaid_date);
+      const oldestDebtDays = Number.isFinite(oldestMs) ? Math.max(0, Math.floor((nowMs - oldestMs) / 86400000)) : 0;
+      const isOverdue = d.debt_reminder_days > 0 && oldestDebtDays >= d.debt_reminder_days;
+
+      return {
+        ...d,
+        oldest_debt_days: oldestDebtDays,
+        overdue_amount: isOverdue ? d.current_debt : 0,
+        is_overdue: isOverdue
+      };
+    });
 
     // Nhật ký giao dịch thu chi mới nhất
     const transactions = db.prepare(`
