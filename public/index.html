@@ -973,8 +973,7 @@
                 </span>
               </div>
               <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                <button class="btn btn-secondary btn-sm" id="btn-cskh-sync-fb" onclick="App.syncFacebookMessages(true)" title="Kéo tin nhắn mới nhất trực tiếp từ Fanpage Facebook" style="flex:1; padding:4px 6px; font-size:11.5px;">🔄 Đồng bộ</button>
-                <button class="btn btn-secondary btn-sm" onclick="App.openCSKHSettingsModal()" title="Cấu hình kết nối Facebook & Zalo" style="padding:4px 8px; font-size:11.5px;">⚙️ Kênh</button>
+                <button class="btn btn-secondary btn-sm" id="btn-cskh-sync-fb" onclick="App.syncFacebookMessages(true)" title="Kéo tin nhắn mới nhất trực tiếp từ Fanpage Facebook" style="flex:1; padding:4px 6px; font-size:11.5px;">🔄 Đồng bộ tin mới</button>
                 <button class="btn btn-secondary btn-sm" onclick="App.simulateTestChat()" title="Tạo tin nhắn khách hàng mẫu để thử nghiệm" style="padding:4px 8px; font-size:11.5px;">+ Test</button>
               </div>
 
@@ -1064,14 +1063,6 @@
                 <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">👤 Hồ Sơ Khách Hàng ERP</div>
                 <div id="cskh-customer-profile" style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
                   Chưa liên kết với danh bạ khách hàng ERP.
-                </div>
-              </div>
-
-              <!-- Hướng dẫn cấu hình kết nối -->
-              <div style="margin-top:auto; padding-top:14px; border-top:1px dashed var(--border-subtle); font-size:11px; color:var(--text-muted);">
-                <div style="font-weight:700; color:var(--text-primary); margin-bottom:4px;">🔗 Webhook Fanpage:</div>
-                <div style="word-break:break-all; background:var(--bg-input); padding:6px; border-radius:4px; font-family:monospace;">
-                  /api/cskh/webhook/facebook
                 </div>
               </div>
             </div>
@@ -1431,8 +1422,64 @@
             <button class="filter-btn" data-admin-sub="prices">💲 Bảng Giá Vật Tư & Gia Công</button>
             <button class="filter-btn" data-admin-sub="pricecheck">✅ Kiểm Tra & Lịch Sử Giá</button>
             <button class="filter-btn" data-admin-sub="ai">✨ Trợ Lý AI (Gemini)</button>
+            <button class="filter-btn" data-admin-sub="channels">📡 Kênh Kết Nối (FB/Zalo)</button>
             <button class="filter-btn" data-admin-sub="telegram">🤖 Thông Báo Telegram</button>
             <button class="filter-btn" data-admin-sub="backup">💾 Sao Lưu & Khôi Phục Dữ Liệu</button>
+          </div>
+
+          <!-- KÊNH KẾT NỐI CSKH (FACEBOOK / ZALO - CHỈ ADMIN) -->
+          <div class="card-panel admin-sub" id="admin-sub-channels" style="display:none;">
+            <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
+              <div>
+                <h2 class="panel-title">📡 Cấu Hình Kênh Kết Nối CSKH (Facebook Fanpage &amp; Zalo)</h2>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                  Chỉ Admin có quyền thiết lập Page ID, Access Token, Verify Token và App Secret để đồng bộ tin nhắn Messenger vào tab CSKH.
+                </p>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <span id="admin-fb-status-badge" style="font-size:12px; padding:4px 10px; border-radius:12px; font-weight:600; background:rgba(148,163,184,0.18); color:var(--text-muted);">
+                  Chưa cấu hình
+                </span>
+                <button class="btn btn-secondary btn-sm" onclick="Admin.checkCSKHChannel()">🔍 Kiểm Tra Kết Nối</button>
+                <button class="btn btn-primary btn-sm" onclick="Admin.saveCSKHChannel()">💾 Lưu &amp; Kết Nối</button>
+              </div>
+            </div>
+
+            <div style="background: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--primary); padding: 10px 14px; border-radius: 4px; margin-bottom: 16px; font-size: 12.5px; line-height: 1.55;">
+              <strong>Hướng dẫn kết nối Fanpage Facebook:</strong><br>
+              1. Vào <em>developers.facebook.com</em> → Ứng dụng của bạn → Messenger → Cài đặt → Webhooks.<br>
+              2. Điền URL gọi lại (Callback URL): <code id="admin-fb-webhook-url">/api/cskh/webhook/facebook</code><br>
+              3. Điền <strong>Verify Token</strong> bên dưới, đăng ký sự kiện <code>messages</code> &amp; <code>messaging_postbacks</code>, sau đó bấm <strong>🔍 Kiểm Tra Kết Nối</strong>.
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Tên Kênh / Fanpage</label>
+                <input type="text" class="form-control" id="cskh-conf-name" placeholder="Ví dụ: Fanpage In Tia Chớp">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Page ID Facebook</label>
+                <input type="text" class="form-control" id="cskh-conf-page-id" placeholder="Nhập ID trang Fanpage Facebook">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Page Access Token (Mã truy cập trang có quyền pages_messaging)</label>
+              <textarea class="form-control" id="cskh-conf-access-token" rows="3" placeholder="Dán mã Page Access Token tạo từ Meta Developer..."></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Verify Token (Mã xác minh Webhook)</label>
+                <input type="text" class="form-control" id="cskh-conf-verify-token" value="tiachop_cskh_verify_token_2026">
+              </div>
+              <div class="form-group">
+                <label class="form-label">App Secret (khuyến nghị — xác thực chữ ký Meta)</label>
+                <input type="password" class="form-control" id="cskh-conf-app-secret" autocomplete="off" placeholder="App Secret (Settings → Basic)">
+              </div>
+            </div>
+
+            <div id="cskh-check-result" style="margin-top:10px;"></div>
           </div>
 
           <!-- TRỢ LÝ AI GEMINI (GOOGLE AI STUDIO - CHỈ ADMIN) -->
@@ -2732,51 +2779,6 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="App.closeModals()">Hủy</button>
         <button class="btn btn-primary" onclick="App.saveCurrentCalculationAsPreset()">💾 Xác Nhận Lưu Mẫu</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL: CẤU HÌNH KÊNH CSKH (FACEBOOK / ZALO) ==================== -->
-  <div class="modal-overlay" id="modal-cskh-settings">
-    <div class="modal-dialog" style="max-width: 600px;">
-      <div class="modal-header">
-        <h3>⚙️ Cấu Hình Kênh Kết Nối CSKH (Facebook &amp; Zalo)</h3>
-        <button class="modal-close-btn" onclick="App.closeModals()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="background: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--primary); padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; font-size: 12px; line-height: 1.5;">
-          <strong>Hướng dẫn kết nối Fanpage Facebook:</strong><br>
-          1. Vào <em>developers.facebook.com</em> &gt; Ứng dụng của bạn &gt; Messenger &gt; Cài đặt &gt; Webhooks.<br>
-          2. Điền URL gọi lại (Callback URL): <code>https://&lt;domain_hoặc_ngrok&gt;/api/cskh/webhook/facebook</code><br>
-          3. Điền Mã xác minh (Verify Token) tương ứng bên dưới và đăng ký nhận sự kiện <code>messages</code>.
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Tên Kênh / Fanpage</label>
-          <input type="text" class="form-control" id="cskh-conf-name" placeholder="Ví dụ: Fanpage In Tia Chớp">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Page ID Facebook</label>
-          <input type="text" class="form-control" id="cskh-conf-page-id" placeholder="Nhập ID trang Fanpage Facebook">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Page Access Token (Mã truy cập trang để gửi tin)</label>
-          <textarea class="form-control" id="cskh-conf-access-token" rows="3" placeholder="Dán mã Page Access Token tạo từ Meta Developer..."></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Verify Token (Mã xác minh Webhook)</label>
-          <input type="text" class="form-control" id="cskh-conf-verify-token" value="tiachop_cskh_verify_token_2026">
-        </div>
-        <div class="form-group">
-          <label class="form-label">App Secret (khuyến nghị — để xác thực tin nhắn thật từ Meta)</label>
-          <input type="password" class="form-control" id="cskh-conf-app-secret" autocomplete="off" placeholder="App Secret (Settings → Basic)">
-        </div>
-        <div id="cskh-check-result" style="margin-top:8px;"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="App.closeModals()">Đóng</button>
-        <button class="btn btn-secondary" onclick="App.checkCSKHConnection()">🔍 Kiểm Tra Kết Nối</button>
-        <button class="btn btn-primary" onclick="App.saveCSKHSettings()">💾 Lưu &amp; Kết Nối</button>
       </div>
     </div>
   </div>

@@ -56,6 +56,7 @@ window.Admin = {
     if (sub === 'papers') this.loadPapers();
     if (sub === 'telegram') this.loadTelegramConfig();
     if (sub === 'ai') this.loadAIConfig();
+    if (sub === 'channels') this.loadCSKHChannel();
   },
 
   async api(url, method = 'GET', body) {
@@ -1307,6 +1308,106 @@ window.Admin = {
       if (feedback) feedback.innerHTML = `<span style="color:#16a34a; font-weight:600;">✅ Kết nối thành công (${data.model}):</span> <em>"${data.reply}"</em>`;
     } catch (err) {
       if (feedback) feedback.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${err.message}</span>`;
+    }
+  },
+
+  // ==========================================
+  // CẤU HÌNH KÊNH KẾT NỐI CSKH (FACEBOOK / ZALO - CHỈ ADMIN)
+  // ==========================================
+  async loadCSKHChannel() {
+    try {
+      const urlEl = document.getElementById('admin-fb-webhook-url');
+      if (urlEl) urlEl.textContent = `${window.location.origin}/api/cskh/webhook/facebook`;
+
+      const res = await fetch('/api/cskh/channels');
+      const channels = await res.json();
+      if (!res.ok) throw new Error(channels.error || 'Không thể tải cấu hình kênh');
+      const fb = (channels || []).find(c => c.platform === 'FACEBOOK');
+      if (!fb) return;
+
+      const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+      setVal('cskh-conf-name', fb.name || '');
+      setVal('cskh-conf-page-id', fb.page_id || '');
+      setVal('cskh-conf-verify-token', fb.verify_token || '');
+
+      const tk = document.getElementById('cskh-conf-access-token');
+      if (tk) {
+        tk.value = '';
+        tk.placeholder = fb.has_access_token
+          ? `Đã lưu (${fb.access_token_masked}) — để trống nếu giữ nguyên`
+          : 'Dán mã Page Access Token tạo từ Meta Developer...';
+      }
+      const sec = document.getElementById('cskh-conf-app-secret');
+      if (sec) {
+        sec.value = '';
+        sec.placeholder = fb.has_app_secret
+          ? 'Đã lưu — để trống nếu giữ nguyên'
+          : 'App Secret (Settings → Basic) để xác thực webhook';
+      }
+
+      const badge = document.getElementById('admin-fb-status-badge');
+      if (badge) {
+        if (fb.connected) {
+          badge.textContent = `🟢 Đã cấu hình (Page ${fb.page_id})`;
+          badge.style.background = '#dcfce7';
+          badge.style.color = '#166534';
+        } else {
+          badge.textContent = '⚪ Chưa cấu hình Fanpage';
+          badge.style.background = 'rgba(148,163,184,0.18)';
+          badge.style.color = 'var(--text-muted)';
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải cấu hình kênh CSKH:', err);
+    }
+  },
+
+  async saveCSKHChannel() {
+    const v = id => document.getElementById(id)?.value.trim() || '';
+    const out = document.getElementById('cskh-check-result');
+    try {
+      const res = await fetch('/api/cskh/channels/channel_fb_main', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: v('cskh-conf-name'),
+          page_id: v('cskh-conf-page-id'),
+          access_token: v('cskh-conf-access-token'),
+          verify_token: v('cskh-conf-verify-token'),
+          app_secret: v('cskh-conf-app-secret'),
+          status: 'ACTIVE'
+        })
+      });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || 'Lỗi lưu cấu hình kênh');
+      const tk = document.getElementById('cskh-conf-access-token');
+      if (tk) tk.value = '';
+      if (r.subscribed === false) {
+        alert('Đã lưu, nhưng đăng ký webhook cho Page thất bại:\n' + (r.subscribe_error || 'không rõ lỗi'));
+      }
+      await this.loadCSKHChannel();
+      if (window.App && App.refreshCSKHChannelBadge) App.refreshCSKHChannelBadge();
+      await this.checkCSKHChannel();
+    } catch (err) {
+      if (out) out.innerHTML = `<span style="color:#dc2626; font-weight:600;">❌ ${this.esc(err.message)}</span>`;
+    }
+  },
+
+  async checkCSKHChannel() {
+    const out = document.getElementById('cskh-check-result');
+    if (out) out.innerHTML = '<span style="color:var(--primary-light);">⏳ Đang kiểm tra kết nối với Facebook...</span>';
+    try {
+      const res = await fetch('/api/cskh/channels/channel_fb_main/check', { method: 'POST' });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || 'Lỗi kiểm tra kết nối');
+      if (out) {
+        out.innerHTML = r.checks.map(c =>
+          `<div style="font-size:12px; margin:3px 0;">${c.pass ? '✅' : '❌'} ${this.esc(c.label)}${c.detail ? ` <span style="color:var(--text-muted);">— ${this.esc(c.detail)}</span>` : ''}</div>`
+        ).join('') + (r.warnings || []).map(w => `<div style="font-size:12px; color:#b45309; margin-top:4px;">⚠ ${this.esc(w)}</div>`).join('')
+          + `<div style="margin-top:6px; font-weight:700; color:${r.ok ? '#16a34a' : '#dc2626'};">${r.ok ? '✅ Kết nối hoạt động bình thường' : '❌ Còn mục chưa đạt — xem các dòng ❌'}</div>`;
+      }
+    } catch (err) {
+      if (out) out.innerHTML = `<span style="color:#dc2626;">❌ Lỗi kiểm tra: ${this.esc(err.message)}</span>`;
     }
   }
 };

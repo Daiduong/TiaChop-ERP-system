@@ -331,23 +331,29 @@ router.post('/conversations/:id/reply', async (req, res) => {
     let status = 'SENT';
     let warning = null;
 
-    if (conv.platform === 'FACEBOOK') {
-      const channel = getFbChannel() ;
+    if (conv.sender_id.startsWith('sim_')) {
+      status = 'SENT';
+    } else if (conv.platform === 'FACEBOOK') {
+      const channel = getFbChannel();
       if (!channel?.access_token) {
         status = 'FAILED'; warning = 'Chưa cấu hình Page Access Token nên tin chưa được gửi tới khách.';
       } else {
         try {
-          const r = await graph('/me/messages', channel.access_token, {
-            method: 'POST',
-            body: { recipient: { id: conv.sender_id }, messaging_type: 'RESPONSE', message: { text } }
-          });
+          const payload = { recipient: { id: conv.sender_id }, messaging_type: 'RESPONSE', message: { text } };
+          let r = await graph('/me/messages', channel.access_token, { method: 'POST', body: payload });
+          // Nếu một ứng dụng khác (Meta AI Agent / Page Inbox) đang giữ quyền thread → tự động tiếp quản rồi gửi lại
+          if (r.error && (r.error.code === 10 || /thread|kiểm soát/i.test(r.error.message || ''))) {
+            await graph('/me/take_thread_control', channel.access_token, {
+              method: 'POST',
+              body: { recipient: { id: conv.sender_id }, metadata: 'ERP Tia Chop takeover' }
+            }).catch(() => null);
+            r = await graph('/me/messages', channel.access_token, { method: 'POST', body: payload });
+          }
           if (r.error) { status = 'FAILED'; warning = r.error.message; }
         } catch (e) {
           status = 'FAILED'; warning = 'Không kết nối được Facebook: ' + e.message;
         }
       }
-    } else if (conv.sender_id.startsWith('sim_')) {
-      status = 'SENT';
     }
 
     db.transaction(() => {

@@ -411,58 +411,6 @@
       } catch (err) {
         alert('Chỉ Admin được tạo hội thoại thử: ' + err.message);
       }
-    },
-
-    async openCSKHSettingsModal() {
-      try {
-        const fb = (await this.cskhFetch('/api/cskh/channels')).find(c => c.platform === 'FACEBOOK');
-        if (!fb || fb.page_id === undefined) { alert('Chỉ Admin được cấu hình kênh kết nối.'); return; }
-        document.getElementById('cskh-conf-name').value = fb.name || '';
-        document.getElementById('cskh-conf-page-id').value = fb.page_id || '';
-        document.getElementById('cskh-conf-verify-token').value = fb.verify_token || '';
-        const tk = document.getElementById('cskh-conf-access-token');
-        tk.value = '';
-        tk.placeholder = fb.has_access_token ? `Đã lưu (${fb.access_token_masked}) — để trống nếu giữ nguyên` : 'Dán Page Access Token...';
-        const sec = document.getElementById('cskh-conf-app-secret');
-        if (sec) { sec.value = ''; sec.placeholder = fb.has_app_secret ? 'Đã lưu — để trống nếu giữ nguyên' : 'App Secret (Settings → Basic) để xác thực webhook'; }
-        document.getElementById('cskh-check-result').innerHTML = '';
-        document.getElementById('modal-cskh-settings').classList.add('active');
-      } catch (err) {
-        alert('Lỗi mở cấu hình kênh: ' + err.message);
-      }
-    },
-
-    async saveCSKHSettings() {
-      const v = id => document.getElementById(id)?.value.trim() || '';
-      try {
-        const r = await this.cskhFetch('/api/cskh/channels/channel_fb_main', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: v('cskh-conf-name'), page_id: v('cskh-conf-page-id'), access_token: v('cskh-conf-access-token'),
-            verify_token: v('cskh-conf-verify-token'), app_secret: v('cskh-conf-app-secret'), status: 'ACTIVE'
-          })
-        });
-        document.getElementById('cskh-conf-access-token').value = '';
-        this.refreshCSKHChannelBadge();
-        if (r.subscribed === false) alert('Đã lưu, nhưng đăng ký webhook cho Page thất bại:\n' + (r.subscribe_error || 'không rõ lỗi'));
-        await this.checkCSKHConnection();
-      } catch (err) {
-        alert('Lỗi lưu cấu hình: ' + err.message);
-      }
-    },
-
-    async checkCSKHConnection() {
-      const out = document.getElementById('cskh-check-result');
-      out.innerHTML = '⏳ Đang kiểm tra kết nối với Facebook...';
-      try {
-        const r = await this.cskhFetch('/api/cskh/channels/channel_fb_main/check', { method: 'POST' });
-        out.innerHTML = r.checks.map(c =>
-          `<div style="font-size:12px; margin:3px 0;">${c.pass ? '✅' : '❌'} ${esc(c.label)}${c.detail ? ` <span style="color:var(--text-muted);">— ${esc(c.detail)}</span>` : ''}</div>`
-        ).join('') + (r.warnings || []).map(w => `<div style="font-size:12px; color:#b45309; margin-top:4px;">⚠ ${esc(w)}</div>`).join('')
-          + `<div style="margin-top:6px; font-weight:700; color:${r.ok ? '#166534' : '#991b1b'};">${r.ok ? 'Kết nối hoạt động bình thường' : 'Còn mục chưa đạt — xem các dòng ❌'}</div>`;
-      } catch (err) {
-        out.textContent = 'Lỗi kiểm tra: ' + err.message;
-      }
     }
   });
 })();
